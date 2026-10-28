@@ -199,3 +199,15 @@ Because RAVDESS is non-commercial and share-alike, the released model weights ar
 CC BY-NC-SA 4.0: research and other non-commercial use.
 Every clip records its source, so a commercially clean model can be retrained
 on GRID + CREMA-D only.
+
+## Licence
+
+* **Code:** MIT, see [LICENSE](LICENSE). This covers everything in the
+  repository except the files listed below.
+* **CC BY-NC-SA 4.0** applies to the model weights in the
+  [release](https://github.com/dusty-art/mimetic/releases/tag/v0.1.0) and to
+  files derived from the datasets or those models: `assets/rest_neutral.npy`
+  (the measured mean neutral face) and the figures, demos and report under
+  `experiments/`.
+* **Apache 2.0** (Google MediaPipe) applies to `assets/face_landmarker.task` and
+  `assets/canonical_face_model.obj`.
