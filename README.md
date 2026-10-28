@@ -77,9 +77,24 @@ Step-by-step setup for each app: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 * **Unreal / MetaHuman / anything that reads Live Link Face CSV**: use
   `livelink.csv` from `mimetic export`.
 
-Live mode uses a causal audio model with 80 ms lookahead. It runs about 5×
-faster than real time on the CPU. Emotion comes from the voice, or you can
-fix it with `--emotion happy --intensity 0.8`.
+Live mode uses a causal audio model with 80 ms lookahead. It needs 3 ms of
+CPU per 20 ms of audio, and the face trails your voice by about 135 ms.
+Emotion comes from the voice (right about half the time on unseen speakers).
+To set it yourself, use `--emotion happy --intensity 0.8`.
+
+## Results (15 held-out speakers)
+
+| | lip error (mm) | p/b/m seals | seals under anger | emotion recognized | lips interpenetrating |
+|---|---|---|---|---|---|
+| viseme table | 4.48 | 0% | 0% | 25% | 0% |
+| same network, no muscle layer | 3.97 | 100% | 81% | 90% | 0.58% |
+| **Mimetic, text** | 4.00 | **100%** | **100%** | 75% | **0.004%** |
+| Mimetic, live mic | 4.30 | 97% | — | 35% | 0.004% |
+
+The tracked real faces show seals on 31% of p/b/m sounds; the tracker misses
+most lip contacts. For an RL controller on the same 52-muscle face, analytic
+gradients reach PPO's best error with 57× fewer steps. Details, ablations and
+limitations: [docs/REPORT.md](docs/REPORT.md).
 
 ## Blender
 
@@ -140,11 +155,15 @@ python scripts/train_controller.py
 ```
 
 ```bash
-python scripts/make_tts_corpus.py && python scripts/train_audio_model.py
+python scripts/make_tts_corpus.py && python scripts/train_audio_model.py && python scripts/fit_live_post.py
 ```
 
 ```bash
 python scripts/train_arkit_map.py && python scripts/evaluate.py
+```
+
+```bash
+python scripts/composition_test.py && python scripts/emotion_cues.py && python scripts/figures.py
 ```
 
 ## Data and licences

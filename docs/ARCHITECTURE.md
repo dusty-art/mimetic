@@ -92,6 +92,16 @@ targets come from the text controller (distillation). Noise, gain, EQ and
 reverb augmentation are applied. Auxiliary heads give phoneme posteriors,
 emotion from voice, and voice activity.
 
+A causal post-processor (`LivePost`) follows it:
+
+* a One Euro filter per muscle, which removes jitter without lagging fast
+  gestures;
+* an emotion pathway that adds the mocap's per-emotion muscle offsets in
+  logit space, weighted by the voice-emotion posterior. The offsets on
+  lip-parting muscles yield during p/b/m/f/v.
+
+Its settings are fitted on training speakers (`scripts/fit_live_post.py`).
+
 ## 5. Tongue (`face/tongue.py`)
 
 No corpus records the tongue, so it follows phonetic targets:

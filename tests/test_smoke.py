@@ -123,3 +123,25 @@ def test_lip_and_lid_transfer_preserve_contact_and_ratio():
     out = MO.apply_lid_transfer(half, N, rest)
     ratio = MO.lid_apertures(rest[None] + out)[0] / MO.lid_apertures(rest[None])[0]
     assert np.allclose(ratio, 0.5, atol=0.05)
+
+
+def test_live_post_streaming_matches_offline():
+    from mimetic.model.audio_model import HOP, AudioToMuscle
+    from mimetic.model.controller import EMOTIONS
+    from mimetic.runtime.live import AudioDriver, LivePost
+    torch.manual_seed(0)
+    rng = np.random.default_rng(0)
+    post = LivePost(rng.normal(0, 1, (len(EMOTIONS), A.N_ACT)), emo_tau=0.3, sharpen=2.0, gain=1.5)
+    drv = AudioDriver(AudioToMuscle(ch=32, dilations=(1, 2, 4)), "cpu", post)
+    wav = (rng.normal(0, 0.1, 16000)).astype(np.float32)
+    la = drv.m.lookahead
+    out = drv.raw(wav, ("auto", 1.0))
+    sl = slice(la, None)
+    ref = post.fresh()(out["acts"][0, sl].numpy(), *drv._post_inputs(out, ("auto", 1.0), sl))
+    drv.reset()
+    pad = np.concatenate([wav, np.zeros(HOP * (la + 2), np.float32)])
+    frames = []
+    for k in range(0, len(pad), 2 * HOP):
+        frames += drv.push(pad[k:k + 2 * HOP], ("auto", 1.0))
+    got = np.array(frames)[la:la + len(ref)]
+    assert np.abs(got - ref[:len(got)]).max() < 1e-4                # post-processing is causal too

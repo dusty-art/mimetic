@@ -1,39 +1,113 @@
 {
  "mimetic": {
   "neutral": {
-   "rounding_mm": 2.9187533855438232,
+   "rounding_mm": 3.112950563430786,
    "closure": 1.0,
-   "corner_lift_mm": -1.2902719974517822,
-   "cheek_raise_mm": 0.2328648865222931,
+   "corner_lift_mm": -1.267756462097168,
+   "cheek_raise_mm": 0.27978652715682983,
    "rounding_vs_neutral": 1.0
   },
   "happy": {
-   "rounding_mm": 5.200839996337891,
+   "rounding_mm": 5.795993804931641,
    "closure": 1.0,
-   "corner_lift_mm": 0.7279941439628601,
-   "cheek_raise_mm": 0.663695216178894,
-   "rounding_vs_neutral": 1.7818703087752883
+   "corner_lift_mm": 1.2349492311477661,
+   "cheek_raise_mm": 0.8692934513092041,
+   "rounding_vs_neutral": 1.8618971573206964
   },
   "angry": {
-   "rounding_mm": 3.77703857421875,
-   "closure": 0.9615384615384616,
-   "corner_lift_mm": -1.2969287633895874,
-   "cheek_raise_mm": 0.3702886700630188,
-   "rounding_vs_neutral": 1.2940588241973074
+   "rounding_mm": 3.5930912494659424,
+   "closure": 1.0,
+   "corner_lift_mm": -1.2781023979187012,
+   "cheek_raise_mm": 0.5284949541091919,
+   "rounding_vs_neutral": 1.154239740160214
   },
   "sad": {
-   "rounding_mm": 3.168224334716797,
+   "rounding_mm": 3.3130581378936768,
    "closure": 1.0,
-   "corner_lift_mm": -0.9405288696289062,
-   "cheek_raise_mm": 0.38576093316078186,
-   "rounding_vs_neutral": 1.0854717463998733
+   "corner_lift_mm": -0.8095895051956177,
+   "cheek_raise_mm": 0.49840569496154785,
+   "rounding_vs_neutral": 1.0642822847280786
   },
   "surprised": {
-   "rounding_mm": 3.3638153076171875,
+   "rounding_mm": 3.391979217529297,
+   "closure": 1.0,
+   "corner_lift_mm": -1.1190671920776367,
+   "cheek_raise_mm": 0.3506011962890625,
+   "rounding_vs_neutral": 1.0896347848810657
+  }
+ },
+ "direct": {
+  "neutral": {
+   "rounding_mm": 3.7529335021972656,
+   "closure": 1.0,
+   "corner_lift_mm": -1.7412432432174683,
+   "cheek_raise_mm": -0.2343364655971527,
+   "rounding_vs_neutral": 1.0
+  },
+  "happy": {
+   "rounding_mm": 4.233757019042969,
    "closure": 0.9615384615384616,
-   "corner_lift_mm": -1.1482903957366943,
-   "cheek_raise_mm": 0.255298912525177,
-   "rounding_vs_neutral": 1.1524835651678191
+   "corner_lift_mm": 0.4610649347305298,
+   "cheek_raise_mm": 0.2762986421585083,
+   "rounding_vs_neutral": 1.1281193808960885
+  },
+  "angry": {
+   "rounding_mm": 4.364978790283203,
+   "closure": 0.8076923076923077,
+   "corner_lift_mm": -1.6447755098342896,
+   "cheek_raise_mm": 0.3834293484687805,
+   "rounding_vs_neutral": 1.1630845011582533
+  },
+  "sad": {
+   "rounding_mm": 3.3237152099609375,
+   "closure": 0.9615384615384616,
+   "corner_lift_mm": -1.4448356628417969,
+   "cheek_raise_mm": 0.1380152702331543,
+   "rounding_vs_neutral": 0.8856312556603975
+  },
+  "surprised": {
+   "rounding_mm": 2.7365951538085938,
+   "closure": 0.9230769230769231,
+   "corner_lift_mm": -1.6793794631958008,
+   "cheek_raise_mm": 0.008115235716104507,
+   "rounding_vs_neutral": 0.7291882875639479
+  }
+ },
+ "noartic": {
+  "neutral": {
+   "rounding_mm": 1.6965713500976562,
+   "closure": 0.0,
+   "corner_lift_mm": -1.4710023403167725,
+   "cheek_raise_mm": 0.10393980145454407,
+   "rounding_vs_neutral": 1.0
+  },
+  "happy": {
+   "rounding_mm": 1.281812071800232,
+   "closure": 0.0,
+   "corner_lift_mm": 1.0983563661575317,
+   "cheek_raise_mm": 0.5792359113693237,
+   "rounding_vs_neutral": 0.7555308957247507
+  },
+  "angry": {
+   "rounding_mm": 2.8089027404785156,
+   "closure": 0.0,
+   "corner_lift_mm": -1.510985016822815,
+   "cheek_raise_mm": 0.3285400867462158,
+   "rounding_vs_neutral": 1.6556349017191836
+  },
+  "sad": {
+   "rounding_mm": 1.3191324472427368,
+   "closure": 0.0,
+   "corner_lift_mm": -0.952642560005188,
+   "cheek_raise_mm": 0.29836106300354004,
+   "rounding_vs_neutral": 0.7775284235271368
+  },
+  "surprised": {
+   "rounding_mm": 1.8882993459701538,
+   "closure": 0.0,
+   "corner_lift_mm": -1.7976529598236084,
+   "cheek_raise_mm": 0.07164699584245682,
+   "rounding_vs_neutral": 1.1130090967653448
   }
  },
  "viseme_table": {

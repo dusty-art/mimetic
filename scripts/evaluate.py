@@ -2,7 +2,8 @@
 
 Systems: mimetic (muscle controller), ablations, direct-regression baseline (same
 network, no muscle layer), viseme-table baseline (classic lookup + smoothing +
-additive emotion offsets), and the muscle fit itself (representation ceiling).
+additive emotion offsets), the live audio model with and without its post-processor (emotion pathway
++ jitter filter), and the muscle fit itself (representation ceiling).
 
 Metrics (canonical face space):
   LVE      lip vertex error: per-frame max error over lip vertices, mean over frames (mm)
@@ -172,7 +173,7 @@ def main():
     rest_ap = measures(rest[None])["aperture"].item()
     close_thr = 0.10
     clips = test.clips[: args.max_clips]
-    names = ["ground_truth", "muscle_fit", "viseme_table"] + list(systems) + (["live_audio"] if audio_drv else [])
+    names = ["ground_truth", "muscle_fit", "viseme_table"] + list(systems) + (["live_audio", "live_audio_raw"] if audio_drv else [])
     acc = {n: {"lve": [], "mve": [], "apcorr": [], "close_hit": 0, "close_tot": 0, "emo_hit": 0, "emo_tot": 0,
                "jerk": [], "pen": [], "frames": 0, "lag": []} for n in names}
     t_run = {n: 0.0 for n in names}
@@ -188,7 +189,7 @@ def main():
             vb = np.zeros((len(cl), m.shape[1], comps.shape[0]), np.float32)
             ph = b["phone"].cpu().numpy()
             for i, c in enumerate(cl):
-                n = c["n"]
+                n = min(c["n"], m.shape[1])
                 seq = vis[ph[i, :n]] + emo_off[c["emo"]] * c["inten"]
                 vb[i, :n] = gauss_smooth(seq, 1.5)
             preds["viseme_table"] = rest + (torch.tensor(vb, device=dev) @ comps + mean).view(*m.shape, -1, 3)
@@ -207,14 +208,15 @@ def main():
                 t_run[k] += time.time() - t0
                 preds[k] = x
             if audio_drv is not None:
-                t0 = time.time()
-                la = np.zeros((len(cl), m.shape[1], A.N_ACT), np.float32)
-                for i, c in enumerate(cl):
-                    aud = track.load_clip(PROCESSED / c["dataset"] / c["speaker"] / f"{c['clip']}.npz")["audio"]
-                    a_live = audio_drv.offline(aud, ("auto", 1.0))[: c["n"]]
-                    la[i, :len(a_live)] = a_live
-                t_run["live_audio"] += time.time() - t0
-                preds["live_audio"] = face(torch.tensor(la, device=dev).reshape(-1, A.N_ACT)).view(*m.shape, -1, 3)
+                auds = [track.load_clip(PROCESSED / c["dataset"] / c["speaker"] / f"{c['clip']}.npz")["audio"] for c in cl]
+                for k, post in (("live_audio", None), ("live_audio_raw", False)):
+                    t0 = time.time()
+                    la = np.zeros((len(cl), m.shape[1], A.N_ACT), np.float32)
+                    for i, (c, aud) in enumerate(zip(cl, auds)):
+                        a_live = audio_drv.offline(aud, ("auto", 1.0), post=post)[: min(c["n"], m.shape[1])]
+                        la[i, :len(a_live)] = a_live
+                    t_run[k] += time.time() - t0
+                    preds[k] = face(torch.tensor(la, device=dev).reshape(-1, A.N_ACT)).view(*m.shape, -1, 3)
             for k, x in preds.items():
                 a_ = acc[k]
                 err = (x - gt).norm(dim=-1)                                     # (B,T,N)
@@ -223,7 +225,7 @@ def main():
                 a_["mve"].append(((err.mean(-1) * m).sum() / m.sum()).item() * 10)
                 ap_p, ap_g = measures(x)["aperture"], measures(gt)["aperture"]
                 for i, c in enumerate(cl):
-                    n = c["n"]
+                    n = min(c["n"], m.shape[1])
                     pp, gg = ap_p[i, :n].cpu().numpy(), ap_g[i, :n].cpu().numpy()
                     if pp.std() > 1e-6 and gg.std() > 1e-6:
                         a_["apcorr"].append(np.corrcoef(pp, gg)[0, 1])

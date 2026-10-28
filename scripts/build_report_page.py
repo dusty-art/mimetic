@@ -52,16 +52,17 @@ def main():
     fit = load("fit_report.json") or {}
     labels = {"ground_truth": "Real face (tracked)", "muscle_fit": "Muscle fit (ceiling)", "viseme_table": "Viseme table + emotion offsets",
               "direct": "Direct regression (same network, no muscles)", "noartic": "Mimetic without articulation constraints",
-              "mimetic": "Mimetic (text path)", "live_audio": "Mimetic live audio (causal, 80 ms)"}
+              "mimetic": "Mimetic (text path)", "live_audio": "Mimetic live audio (causal)",
+              "live_audio_raw": "Live audio without post-processing"}
     rows = []
-    for k in ("ground_truth", "muscle_fit", "viseme_table", "direct", "noartic", "mimetic", "live_audio"):
+    for k in ("ground_truth", "muscle_fit", "viseme_table", "direct", "noartic", "mimetic", "live_audio", "live_audio_raw"):
         if k not in ev:
             continue
         r = ev[k]
         cls = ' class="ours"' if k in ("mimetic", "live_audio") else (' class="ref"' if k in ("ground_truth", "muscle_fit") else "")
         rows.append(f"<tr{cls}><th scope=row>{labels[k]}</th><td>{fmt(r['LVE_mm'])}</td><td>{fmt(r['ApCorr'])}</td>"
                     f"<td>{fmt(100 * r['Closure'], 0)}%</td><td>{fmt(100 * r['EmoAcc'], 0)}%</td><td>{fmt(r['Jerk_rel'])}</td>"
-                    f"<td>{fmt(r['Pen_pct'], 1)}%</td></tr>")
+                    f"<td>{fmt(r['Pen_pct'], 2)}%</td><td>{fmt(r.get('AV_offset_ms'), 0) if k != 'ground_truth' else '—'}</td></tr>")
     comp_rows = []
     for s in ("mimetic", "direct", "viseme_table", "noartic"):
         if s not in comp:
@@ -90,16 +91,19 @@ def main():
     else:
         cue_head = ""
     mim = ev.get("mimetic", {})
-    best_base = min((ev[k]["LVE_mm"] for k in ("direct", "viseme_table") if k in ev), default=None)
+    gt_close = ev.get("ground_truth", {}).get("Closure")
+    angry = {s: comp.get(s, {}).get("angry", {}).get("closure") for s in ("mimetic", "direct")}
     apg = rl.get("apg", {}).get("final_mean_abs_err_mm")
     ppo = rl.get("ppo", {}).get("final_mean_abs_err_mm")
     ppo20 = rl_long.get("ppo", {}).get("final_mean_abs_err_mm")
     live = ev.get("live_audio", {})
     tiles = [
-        (fmt(mim.get("LVE_mm")) + " mm", "lip vertex error on unseen speakers" + (f" (best baseline {fmt(best_base)} mm)" if best_base else "")),
-        (fmt(100 * mim["Closure"], 0) + "%" if mim else "—", "of p / b / m sounds seal the lips"),
+        (fmt(100 * mim["Closure"], 0) + "%" if mim else "—",
+         "of p / b / m sounds seal the lips on unseen speakers" + (f" (tracked real faces: {fmt(100 * gt_close, 0)}%)" if gt_close else "")),
+        (fmt(100 * angry["mimetic"], 0) + "%" if angry["mimetic"] is not None else "—",
+         "of seals kept under anger" + (f" (same network without muscles: {fmt(100 * angry['direct'], 0)}%)" if angry["direct"] is not None else "")),
         ("57×", "fewer samples than PPO to learn 52-muscle articulation"),
-        ("4.3 ms", "per 20 ms of live audio on a laptop CPU (80 ms lookahead)"),
+        ("~135 ms", "from voice to face in live mode, using 3 ms of CPU per 20 ms of audio"),
     ]
     tiles_html = "".join(f'<div class="tile"><b>{html.escape(a)}</b><span>{html.escape(b)}</span></div>' for a, b in tiles)
     F = EXPERIMENTS / "figures"
@@ -116,14 +120,20 @@ def main():
         web=img(EXPERIMENTS / "web_demo.png", 900),
         tongue=img(F / "tongue.png", 1100),
         v_emotions=video(EXPERIMENTS / "demos" / "emotions.mp4"), v_muscles=video(EXPERIMENTS / "demos" / "muscles.mp4"),
-        v_bilabials=video(EXPERIMENTS / "demos" / "bilabials.mp4"),
-        eval_rows="\n".join(rows) or "<tr><td colspan=7>Evaluation pending</td></tr>",
+        v_bilabials=video(EXPERIMENTS / "demos" / "bilabials.mp4"), v_live=video(EXPERIMENTS / "demos" / "live_audio.mp4"),
+        eval_rows="\n".join(rows) or "<tr><td colspan=8>Evaluation pending</td></tr>",
         comp_rows="\n".join(comp_rows) or "<tr><td colspan=7>Composition test pending</td></tr>",
         cue_rows="\n".join(cue_rows) or "<tr><td colspan=6>pending</td></tr>", cue_head=cue_head,
         fit_lips=fmt(fit.get("mean_lips_mm")), apg=fmt(apg), ppo=fmt(ppo), ppo20=fmt(ppo20),
         zero=fmt(rl_long.get("zero_policy_err_mm") or rl.get("zero_policy_err_mm")),
         n_test=ev.get("_meta", {}).get("test_clips", "—"), n_bil=ev.get("_meta", {}).get("bilabial_occurrences", "—"),
         live_lve=fmt(live.get("LVE_mm")), live_close=fmt(100 * live["Closure"], 0) + "%" if live else "—",
+        live_emo=fmt(100 * live["EmoAcc"], 0) + "%" if live else "—",
+        raw_emo=fmt(100 * ev["live_audio_raw"]["EmoAcc"], 0) + "%" if "live_audio_raw" in ev else "—",
+        live_jerk=fmt(live.get("Jerk_rel")), raw_jerk=fmt(ev.get("live_audio_raw", {}).get("Jerk_rel")),
+        mim_emo=fmt(100 * mim["EmoAcc"], 0) + "%" if mim else "—",
+        dir_emo=fmt(100 * ev["direct"]["EmoAcc"], 0) + "%" if "direct" in ev else "—",
+        dir_pen=fmt(ev.get("direct", {}).get("Pen_pct")),
     )
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "index.html").write_text(page)
@@ -219,16 +229,18 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
     <figure><video controls playsinline preload="metadata" src="{v_emotions}"></video><figcaption>One sentence, five emotions (the tag switches mid-stream).</figcaption></figure>
     <figure><video controls playsinline preload="metadata" src="{v_muscles}"></video><figcaption>Muscle overlay: happy, disgusted, fearful.</figcaption></figure>
     <figure><video controls playsinline preload="metadata" src="{v_bilabials}"></video><figcaption>“Peter Piper picked a peck…”: every p and b seals.</figcaption></figure>
+    <figure><video controls playsinline preload="metadata" src="{v_live}"></video><figcaption>Live audio model on a real recording of an actor it never heard: happy, angry, surprised. Emotion comes from the voice.</figcaption></figure>
   </div>
-  <p class="col" style="color:var(--muted);font-size:.92rem">Press play for sound. Everything is generated from the text alone: Kokoro voice and timing, then muscles, then skin.</p>
+  <p class="col" style="color:var(--muted);font-size:.92rem">Press play for sound. The first three are generated from text alone: Kokoro voice and timing, then muscles, then skin. The fourth is generated from audio alone.</p>
 </section>
 
 <section>
   <div class="eyebrow">Held-out speakers · {n_test} clips · {n_bil} bilabials</div>
   <h2>Accuracy against real faces</h2>
   <div class="table"><table>
-    <thead><tr><th>System</th><th>Lip error (mm) ↓</th><th>Aperture corr ↑</th><th>p/b/m closed ↑</th><th>Emotion read ↑</th><th>Jerk vs real</th><th>Lips interpenetrate ↓</th></tr></thead>
+    <thead><tr><th>System</th><th>Lip error (mm) ↓</th><th>Aperture corr ↑</th><th>p/b/m closed ↑</th><th>Emotion read ↑</th><th>Jerk vs real</th><th>Lips interpenetrate ↓</th><th>Face behind voice (ms)</th></tr></thead>
     <tbody>{eval_rows}</tbody></table></div>
+  <div class="note col">What the muscle layer buys, against the same network trained to output the face directly: the same lip accuracy, every seal kept under emotion, lips that interpenetrate on essentially no frames (vs {dir_pen}%), and motion closer to real dynamics. What it does not buy: the direct model's emotions read more clearly ({dir_emo} vs {mim_emo}). Both read above real faces because they produce each label's typical expression.</div>
   <figure><img alt="Bar charts comparing systems on lip error, closure, aperture correlation and emotion recognition" src="{bars}"></figure>
   <h3>How much of each emotion shows on the face</h3>
   <div class="table"><table>
@@ -289,7 +301,7 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
       <p><code>mimetic say "[happy:0.8] Hello!" -o hello.mp4</code>: text with emotion tags to video. Kokoro TTS gives exact phoneme timing.</p>
       <p><code>mimetic live --vmc</code> / <code>--vts</code>: microphone to VSeeFace, Warudo, VNyan (52 ARKit blendshapes) or VTube Studio (Live2D parameters).</p>
       <p><code>mimetic export</code>: Live Link Face CSV, JSON, OBJ + PC2 point cache. The Blender add-on imports the head with jaw, teeth, eyes and voice, or keyframes ARKit shape keys on your own character.</p>
-      <p>Live mode: a causal convolutional network with 80 ms lookahead. On held-out speakers it reaches {live_lve} mm lip error with {live_close} of bilabials sealed, inferring emotion from the voice.</p>
+      <p>Live mode: a causal convolutional network with 80 ms lookahead, then a post-processor that removes jitter (jerk {raw_jerk}× real → {live_jerk}×) and shows the voice's emotion on the face ({raw_emo} → {live_emo} recognized). The emotion yields to lip seals on p/b/m/f/v. On held-out speakers it reaches {live_lve} mm lip error with {live_close} of bilabials sealed.</p>
     </div>
     <figure><img alt="The animated head rendered in Blender at two frames" src="{blender}"><figcaption>Generated by the Blender add-on (Eevee): skin through a mesh cache, plus jaw, teeth, irises and gaze.</figcaption></figure>
   </div>
@@ -300,7 +312,10 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
   <div class="eyebrow">Limits</div>
   <h2>What it does not do yet</h2>
   <ul>
-    <li>The face is a single 468-vertex shell with procedural teeth, tongue and eyes. It has no wrinkles and no articulated tongue.</li>
+    <li>The face is a single 468-vertex shell with procedural teeth and eyes, and no wrinkles. The tongue follows phonetic rules, since no corpus records it.</li>
+    <li>The controller under-produces the inner-brow raise of surprise, which the muscle fit captures.</li>
+    <li>Live emotion is capped by voice-emotion recognition, about 50% on unseen actors. Pinning the emotion is more reliable.</li>
+    <li>Risorius and buccinator are nearly redundant, so the fit's split between them is not identifiable from video.</li>
     <li>Ground truth comes from a monocular tracker, which under-reports fast lip contacts and depth.</li>
     <li>Emotional training speech is acted, from 14 sentences. Generalization was measured on new TTS sentences, not on real recordings of them.</li>
     <li>RAVDESS is non-commercial, so this model is for research only. Each clip records its source, so retraining on GRID + CREMA-D only is possible.</li>

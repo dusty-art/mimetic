@@ -17,7 +17,8 @@ Everything below is derived from those.
 mimetic live --vmc 127.0.0.1:39539
 ```
 
-Emotion is inferred from your voice. To pin it to one emotion:
+Emotion is inferred from your voice. That is right about half the time on
+voices the model has never heard, so for a stream with a set mood, pin it:
 
 ```bash
 mimetic live --vmc --emotion happy --intensity 0.7
@@ -36,9 +37,10 @@ mimetic live --vmc --emotion happy --intensity 0.7
 mimetic live --vts
 ```
 
-Latency: about 80 ms of model lookahead, plus your audio buffer. If your
+Latency: the face trails your voice by about 135 ms (80 ms of model
+lookahead, a 32 ms audio buffer, and a light anti-jitter filter). If your
 stream's audio and video drift apart, delay the microphone in OBS by about
-100 ms.
+130 ms.
 
 ## Pre-recorded lines
 

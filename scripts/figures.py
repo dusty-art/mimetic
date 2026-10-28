@@ -45,12 +45,12 @@ def eval_bars():
     systems = [k for k in r if not k.startswith("_")]
     labels = {"ground_truth": "real (tracked)", "muscle_fit": "muscle fit", "viseme_table": "viseme table",
               "mimetic": "Mimetic", "direct": "direct regression", "noartic": "Mimetic − constraints",
-              "live_audio": "Mimetic live audio"}
+              "live_audio": "Mimetic live audio", "live_audio_raw": "live audio, unprocessed"}
     metrics = [("LVE_mm", "lip vertex error (mm) ↓"), ("Closure", "p/b/m lip closure ↑"),
                ("ApCorr", "lip aperture correlation ↑"), ("EmoAcc", "emotion recognisability ↑")]
     fig, axes = plt.subplots(1, 4, figsize=(13, 3.4), dpi=150)
     cols = {"ground_truth": "#9ca3af", "muscle_fit": "#d1d5db", "viseme_table": "#60a5fa", "direct": "#2563eb",
-            "noartic": "#fdba74", "mimetic": "#c2410c", "live_audio": "#ea580c"}
+            "noartic": "#fdba74", "mimetic": "#c2410c", "live_audio": "#ea580c", "live_audio_raw": "#fed7aa"}
     for ax, (m, t) in zip(axes, metrics):
         vals = [r[s][m] for s in systems]
         ax.barh([labels.get(s, s) for s in systems], vals, color=[cols.get(s, "#888") for s in systems])
