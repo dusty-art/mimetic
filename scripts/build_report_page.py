@@ -28,6 +28,13 @@ def img(path, width=900, q=82):
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def video(path, max_mb=3.5):
+    p = Path(path)
+    if not p.exists() or p.stat().st_size > max_mb * 1e6:
+        return ""
+    return "data:video/mp4;base64," + base64.b64encode(p.read_bytes()).decode()
+
+
 def load(name):
     p = EXPERIMENTS / name
     return json.loads(p.read_text()) if p.exists() else None
@@ -107,6 +114,8 @@ def main():
         bars=img(F / "eval_bars.png", 1100),
         blender=img(EXPERIMENTS / "blender" / "frames.png", 768),
         web=img(EXPERIMENTS / "web_demo.png", 900),
+        v_emotions=video(EXPERIMENTS / "demos" / "emotions.mp4"), v_muscles=video(EXPERIMENTS / "demos" / "muscles.mp4"),
+        v_bilabials=video(EXPERIMENTS / "demos" / "bilabials.mp4"),
         eval_rows="\n".join(rows) or "<tr><td colspan=7>Evaluation pending</td></tr>",
         comp_rows="\n".join(comp_rows) or "<tr><td colspan=7>Composition test pending</td></tr>",
         cue_rows="\n".join(cue_rows) or "<tr><td colspan=6>pending</td></tr>", cue_head=cue_head,
@@ -171,6 +180,8 @@ tbody tr:last-child th, tbody tr:last-child td {{ border-bottom: 0; }}
 code, .mono {{ font-family: var(--mono); font-size: 0.88em; }}
 ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
 .note {{ background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }}
+.vids {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }}
+.vids video {{ width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: #e9ecef; display: block; }}
 .aus {{ display: flex; flex-wrap: wrap; gap: 6px; }}
 .aus span {{ font: 0.8rem/1 var(--mono); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--panel); }}
 </style>
@@ -191,6 +202,17 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
     <thead><tr><th>System</th><th>Emotion</th><th>Rounding (mm)</th><th>vs neutral</th><th>p/b/m closed</th><th>Corner lift (mm)</th><th>Cheek raise (mm)</th></tr></thead>
     <tbody>{comp_rows}</tbody></table></div>
   <p class="col" style="color:var(--muted);font-size:.92rem">Eight new sentences synthesized by TTS (not in the training data). Rounding = mouth width at unrounded vowels minus width at rounded sounds; corner lift and cheek raise show how much of the emotion remains visible.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Watch it</div>
+  <h2>Generated from text, with sound</h2>
+  <div class="vids">
+    <figure><video controls playsinline preload="metadata" src="{v_emotions}"></video><figcaption>One sentence, five emotions (the tag switches mid-stream).</figcaption></figure>
+    <figure><video controls playsinline preload="metadata" src="{v_muscles}"></video><figcaption>Muscle overlay: happy, disgusted, fearful.</figcaption></figure>
+    <figure><video controls playsinline preload="metadata" src="{v_bilabials}"></video><figcaption>“Peter Piper picked a peck…”: every p and b seals.</figcaption></figure>
+  </div>
+  <p class="col" style="color:var(--muted);font-size:.92rem">Press play for sound. Everything is generated from the text alone: Kokoro voice and timing, then muscles, then skin.</p>
 </section>
 
 <section>

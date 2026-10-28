@@ -130,19 +130,21 @@ class Batcher:
     def crop(self, wav, acts, phone, blink):
         S = int(CROP_S * SR)
         n_mel = (S - N_FFT) // HOP + 1
+        # Audio can run a little past the last video frame: crop only where both exist.
+        usable = min(len(wav), int(len(acts) / FPS * SR))
         if len(wav) < S:
             wav = np.pad(wav, (0, S - len(wav)))
-        st = int(self.rng.integers(0, len(wav) - S + 1))
+        st = int(self.rng.integers(0, max(0, usable - S) + 1))
         w = wav[st:st + S]
         sh = st / SR
         def sub(x, nearest=False):
-            t0 = int(sh * FPS)
+            t0 = min(int(sh * FPS), len(x) - 1)
             xx = x[t0:]
             return (nearest_frames if nearest else interp_frames)(xx.reshape(len(xx), -1), n_mel, offset_s=N_FFT / 2 / SR + (sh - t0 / FPS))
         a = sub(acts)
         ph = sub(phone[:, None], nearest=True)[:, 0]
         bl = sub(blink[:, None].astype(np.float32), nearest=True)[:, 0] > 0.5
-        valid = np.arange(n_mel) * HOP + N_FFT // 2 < len(wav) - st
+        valid = np.arange(n_mel) * HOP + N_FFT // 2 < min(len(wav), usable) - st
         return w.astype(np.float32) / 32767, a, ph, bl, valid
 
     def sample(self, B, p_tts=0.4):

@@ -183,7 +183,7 @@ function updateMuscles(v, acts) {
     if (m.kind==="sphincter"||m.kind==="marginal") o = ins.clone().lerp(o, 0.35);
     o.z += 0.8; ins.z += 0.8;
     P.set([o.x,o.y,o.z, ins.x,ins.y,ins.z], 6*i);
-    const a = acts[i]; C.set([0.2+0.8*a, 0.3*(1-a), 0.95*(1-a), 0.2+0.8*a, 0.3*(1-a), 0.95*(1-a)], 6*i);
+    const a = Math.pow(Math.min(1, acts[i] / 0.5), 0.7); C.set([0.2+0.8*a, 0.3*(1-a), 0.95*(1-a), 0.2+0.8*a, 0.3*(1-a), 0.95*(1-a)], 6*i);
   });
   muscleLines.geometry.attributes.position.needsUpdate = true; muscleLines.geometry.attributes.color.needsUpdate = true;
 }

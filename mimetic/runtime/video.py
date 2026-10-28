@@ -37,13 +37,22 @@ def head_matrix(h):
     return M
 
 
+_FONT = None
+
+
 def _caption(img, text):
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
+    global _FONT
+    if _FONT is None:
+        try:
+            _FONT = ImageFont.load_default(size=max(14, img.shape[0] // 26))
+        except TypeError:
+            _FONT = ImageFont.load_default()
     im = Image.fromarray(img)
     d = ImageDraw.Draw(im)
-    w = d.textlength(text)
-    d.rectangle([8, 8, 16 + w, 26], fill=(255, 255, 255))
-    d.text((12, 11), text, fill=(20, 20, 20))
+    x0, y0, x1, y1 = d.textbbox((14, 12), text, font=_FONT)
+    d.rounded_rectangle([x0 - 8, y0 - 6, x1 + 8, y1 + 6], radius=6, fill=(255, 255, 255))
+    d.text((14, 12), text, fill=(20, 20, 20), font=_FONT)
     return np.asarray(im)
 
 

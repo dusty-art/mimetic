@@ -260,8 +260,9 @@ class FaceRenderer:
             ins = (w[:, None] * x).sum(0) / w.sum()
             if bm.spec.kind in ("sphincter", "marginal"):
                 o = ins + (o - ins) * 0.35
-            a = float(act[m])
-            col = np.array([0.15 + 0.85 * a, 0.25 * (1 - a), 0.9 * (1 - a), 0.35 + 0.65 * min(1, a * 2)])
+            # Speech uses 10-40% of a muscle's range, so the colour scale saturates at 50%.
+            a = min(1.0, float(act[m]) / 0.5) ** 0.7
+            col = np.array([0.15 + 0.85 * a, 0.25 * (1 - a), 0.9 * (1 - a), 0.35 + 0.65 * a])
             segs.append((o, ins)); cols.append(col)
         mvp = self.proj @ self.view @ model
         pts, cs = [], []
@@ -269,7 +270,7 @@ class FaceRenderer:
             # Camera-facing ribbon
             d = b - a
             side = np.cross(d, self.eye - (a + b) / 2)
-            side = side / (np.linalg.norm(side) + 1e-9) * 0.09
+            side = side / (np.linalg.norm(side) + 1e-9) * 0.11
             a2, b2 = a + np.array([0, 0, 0.9]), b + np.array([0, 0, 0.9])
             quad = [a2 - side, a2 + side, b2 + side, a2 - side, b2 + side, b2 - side]
             pts += quad; cs += [c] * 6
