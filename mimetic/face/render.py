@@ -124,6 +124,16 @@ def uv_sphere(r=1.0, nu=32, nv=16):
     return p * r, np.array(f)
 
 
+def cavity_bowl(nu=28, nv=14):
+    """Back half of an ellipsoid: the dark of the mouth, open toward the lips so it never hides the tongue."""
+    v, f = uv_sphere(1.0, nu, nv)
+    keep = v[:, 2] <= 0.15
+    remap = -np.ones(len(v), int)
+    remap[keep] = np.arange(keep.sum())
+    ff = np.array([[remap[a], remap[b], remap[c]] for a, b, c in f if keep[a] and keep[b] and keep[c]])
+    return v[keep] * np.array([2.3, 1.7, 2.0]) + np.array([0.0, -4.6, 2.9]), ff
+
+
 def teeth_arch(y_top, y_bot, z_front, width=2.15, depth=1.7, thick=0.32, n=24):
     s = np.linspace(-1, 1, n)
     x = width * s
@@ -174,7 +184,7 @@ class FaceRenderer:
         col = (1 - lip[:, None]) * SKIN + lip[:, None] * LIP
         self.colors = (self.S @ col).astype(np.float32)
         self.eye_mesh = uv_sphere(1.0, 40, 20)
-        self.cavity = uv_sphere(1.0, 24, 12)
+        self.cavity = cavity_bowl()
         self.tongue = uv_sphere(1.0, 24, 12)
         self.set_camera()
 
@@ -206,7 +216,7 @@ class FaceRenderer:
         vao.release(); vbo.release(); ibo.release()
 
     def render(self, x: np.ndarray, act: np.ndarray | None = None, jaw=None, head=None,
-               gaze=(0.0, 0.0), show_muscles=False, skin_alpha=1.0, bg=(0.93, 0.93, 0.95)) -> np.ndarray:
+               gaze=(0.0, 0.0), show_muscles=False, skin_alpha=1.0, bg=(0.93, 0.93, 0.95), tongue=None) -> np.ndarray:
         """x (N,3) simulated vertices; act (N_ACT,) activations; jaw (R,t) from the sim."""
         sim = self.sim
         model = np.eye(4, dtype=np.float32) if head is None else head.astype(np.float32)
@@ -220,16 +230,15 @@ class FaceRenderer:
             R, t = jaw
         jawm = np.eye(4, dtype=np.float32); jawm[:3, :3] = R; jawm[:3, 3] = t
         # Oral cavity (dark), teeth, tongue, eyes
-        cv, cf = self.cavity
-        cav = cv * np.array([2.3, 1.7, 2.0]) + np.array([0.0, -4.6, 2.9])
+        cav, cf = self.cavity
         self._draw(cav, cf, np.array([0.16, 0.04, 0.05]), model, wrap=0.0, spec=0.0)
         tv, tf = teeth_arch(-3.55, -4.18, 4.85)
         self._draw(tv, tf, np.array([0.93, 0.91, 0.85]), model, spec=0.5)
         lv, lf = teeth_arch(-4.38, -5.0, 4.6, width=1.95, depth=1.6)
         self._draw(lv, lf, np.array([0.9, 0.88, 0.82]), model @ jawm, spec=0.5)
-        gv, gf = self.tongue
-        tongue = gv * np.array([1.5, 0.45, 1.7]) + np.array([0.0, -4.85, 3.1])
-        self._draw(tongue, gf, np.array([0.7, 0.32, 0.33]), model @ jawm, spec=0.4)
+        from mimetic.face.tongue import tongue_mesh
+        tv_, tf_ = tongue_mesh(np.zeros(5) if tongue is None else tongue)
+        self._draw(tv_, tf_, np.array([0.72, 0.33, 0.34]), model @ jawm, spec=0.4)
         ev, ef = self.eye_mesh
         for (c, r) in sim.eyes:
             gx, gy = gaze

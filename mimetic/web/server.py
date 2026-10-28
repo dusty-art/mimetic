@@ -66,6 +66,8 @@ def mesh():
         muscles.append({"name": j, "kind": "jaw", "facs": list(A.JAW_FACS[j]), "description": A.JAW_DESCRIPTIONS[j],
                         "origin": None, "jaw": True, "ins_idx": [], "ins_w": []})
     eyes = [{"c": c.round(3).tolist(), "r": float(r)} for c, r in sim.eyes]
+    from mimetic.face.tongue import tongue_mesh
+    tv, tf = tongue_mesh(np.zeros(5))
     lip = np.zeros(C.N_VERTS)
     ym = A.mouth_line_y(sim.face, rest[:, 0])
     lip[(np.abs(rest[:, 0]) < 2.7) & (rest[:, 1] < ym + 0.75) & (rest[:, 1] > ym - 1.0)] = 1
@@ -74,7 +76,7 @@ def mesh():
         "sub_rows": b64(S.row, np.int32), "sub_cols": b64(S.col, np.int32), "sub_vals": b64(S.data),
         "n_sub": int(S.shape[0]), "w_jaw": b64(sim.w_jaw.numpy()), "lip": b64(S @ lip),
         "muscles": muscles, "eyes": eyes, "names": A.MUSCLE_NAMES, "voices": VOICES,
-        "arkit": outputs.ARKIT})
+        "arkit": outputs.ARKIT, "tongue_rest": b64(tv), "tongue_faces": b64(tf, np.int32), "n_tongue": len(tv)})
 
 
 class SayReq(BaseModel):
@@ -101,7 +103,10 @@ def say(req: SayReq):
                             seed=req.seed, emotion_gain=req.expressiveness)
     STATE["last"] = anim
     v = anim.vertices
+    from mimetic.face.tongue import tongue_mesh
+    tongue = np.stack([tongue_mesh(p)[0] for p in anim.tongue]) if anim.tongue is not None else None
     return JSONResponse({
+        "tongue": b64(tongue.astype(np.float16), np.float16) if tongue is not None else None,
         "fps": anim.fps, "n": anim.n, "acts": b64(anim.acts), "verts": b64(v.astype(np.float16), np.float16),
         "head": b64(anim.head), "gaze": b64(anim.gaze), "arkit": b64(anim.arkit),
         "audio": base64.b64encode(wav_bytes(anim.audio, anim.sr)).decode(),
@@ -146,7 +151,10 @@ async def live(ws: WebSocket):
             with torch.no_grad():
                 v = eng.face(torch.as_tensor(a, dtype=torch.float32)).numpy()
             emo = getattr(drv, "last_emotion", None)
+            from mimetic.face.tongue import tongue_mesh
+            tg = tongue_mesh(drv.last_tongue[-1])[0] if getattr(drv, "last_tongue", None) else None
             await ws.send_text(json.dumps({"acts": a[0].round(3).tolist(), "verts": b64(v[0].astype(np.float16), np.float16),
+                                           "tongue": b64(tg.astype(np.float16), np.float16) if tg is not None else None,
                                            "vad": getattr(drv, "last_vad", 0.0),
                                            "emotion": None if emo is None else emo.round(3).tolist()}))
     except WebSocketDisconnect:

@@ -143,5 +143,6 @@ class AudioToMuscle(nn.Module):
             h, c2 = blk.stream(h, c)
             new.append(c2)
         return {"acts": torch.sigmoid(self.act_head(h)).transpose(1, 2),
+                "phone": self.phone_head(h).transpose(1, 2),
                 "emotion": self.emo_head(h).transpose(1, 2),
                 "vad": self.vad_head(h).transpose(1, 2)[..., 0]}, new

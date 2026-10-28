@@ -209,9 +209,42 @@ the TTS corpus, with controller outputs as targets (distillation). Noise
 applied. Auxiliary heads give phonemes, emotion from voice, and voice
 activity.
 
+**Runtime.** Text mode runs about 8× faster than real time on the laptop
+CPU: 4.1 s of speech, including voice synthesis, in 0.5 s. Sentence
+streaming animates LLM or speech-to-text output as each sentence completes;
+the first one is ready 0.23 s after its punctuation arrives. An
+*expressiveness* gain scales only the emotion pathway, so a cartoony avatar
+can exaggerate emotion without distorting lip-sync.
+
+**Tongue** (`face/tongue.py`). A parametric tongue in the mandible frame has
+five controls: tip up, tip forward, front, back and low. Phonetic targets
+drive them:
+
+* alveolar tip-up for t/d/n/l/s;
+* the tip between the teeth for th;
+* dorsum up for k/g/ng;
+* curled for r;
+* low for open vowels.
+
+Critical consonants dominate the blend, and zero-phase anticipatory
+smoothing models coarticulation. The tongue feeds the renderer, the Blender
+cache and ARKit `tongueOut`.
+
 **Life layer.** Blinks follow emotion-dependent rates and favor pauses, with
 an 80 ms close and 180 ms open. Gaze uses fixations and saccades. Head motion
 combines the controller's prosodic motion with band-limited drift.
+
+## 5b. Iterations that changed the results
+
+Four corrections mattered more than any model tweak. Each was found by
+measuring, not by inspection.
+
+| finding | symptom | fix | effect |
+|---|---|---|---|
+| Jaw glides forward when it opens | fitter co-activated "protrusion" with every opening (r = 0.78) | condylar translation 0.35 → 2.1 cm/rad | r = 0.57; anatomy-consistent decompositions |
+| Lip contact doesn't transfer between faces | 18% of ground-truth frames interpenetrating; some speakers never sealed | contact-preserving per-pair transfer | sealed frames 0.1% → 9% on a test speaker; no interpenetration |
+| Effort prior erased 1–2 mm upper-face cues | surprise eye-widening 0.05 mm in fits vs 1.6 mm real | ratio eyelid transfer, eye-aperture term, ×0.3 upper-face effort prior | fit eye-widening 1.60 mm (real 1.62); controller 0.04 → 1.19 mm |
+| Emotion classifier keyed on tracker texture | real→fit cross-domain accuracy 30% vs 65% in-domain | geometric emotion judge trained on real + fit faces | fair comparison across representations |
 
 ## 6. Results
 
@@ -247,9 +280,12 @@ then transferring.
 
 ## 7. Limitations
 
-* The face is a single 468-vertex shell with procedural teeth, tongue and
-  eyes. It has no wrinkles, and the tongue is not articulated (/l/, /th/ use
-  no tongue model).
+* The face is a single 468-vertex shell with procedural teeth and eyes, and
+  no wrinkles.
+* The tongue (tip, blade, dorsum) follows phonetic targets with
+  anticipatory coarticulation, not learned data. No talking-face corpus
+  records the tongue. In live mode it follows the audio model's phoneme
+  posteriors.
 * Monocular tracking limits depth accuracy, and MediaPipe smooths fast lip
   events. Contact transfer and the articulation constraints compensate, but
   the ground truth itself is a tracker.
@@ -267,7 +303,8 @@ then transferring.
 
 * Calibrate muscle parameters per region with the differentiable simulator
   (system identification), not only through corrective fields.
-* Add a tongue (hydrostat) and teeth contact for dentals and labiodentals.
+* Learn the tongue from articulography data (EMA) instead of rules, and add
+  teeth-lip contact physics for f/v.
 * Use an emotional TTS so voice and face agree.
 * Collect a short iPhone (ARKit) recording session for clean lip-contact
   ground truth.

@@ -50,6 +50,7 @@ def cmd_export(a):
     export3d.write_pc2(out / "head.pc2", frames, anim.fps)
     np.save(out / "jaw.npy", export3d.jaw_tracks(anim.acts))
     export3d.write_props(out)
+    export3d.write_tongue_cache(out, anim)
     np.save(out / "gaze.npy", anim.gaze)
     np.save(out / "head_rotation.npy", anim.head)
     print(f"wrote {out}/ ({anim.n} frames at {anim.fps:g} fps)")
@@ -119,6 +120,7 @@ def cmd_mocap(a):
     np.save(out / "jaw.npy", export3d.jaw_tracks(anim.acts))
     np.save(out / "gaze.npy", anim.gaze)
     export3d.write_props(out)
+    export3d.write_tongue_cache(out, anim)
     if anim.audio is not None:
         sf.write(out / "audio.wav", anim.audio, anim.sr)
     if a.render:

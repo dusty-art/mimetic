@@ -51,5 +51,15 @@ def video_to_animation(engine, path, device="cpu") -> Animation:
     head[:, 0] *= -1
     audio = track.read_audio(path).astype(np.float32) / 32768.0
     fps = float(tr["fps"])
+    tongue = None
+    if len(audio) and (CHECKPOINTS / "audio_model.pt").exists():
+        # Video cannot see the tongue; the soundtrack can: phone posteriors from the audio model drive it.
+        from mimetic.face.tongue import tongue_from_posteriors
+        from mimetic.runtime.live import AudioDriver
+        _, post = AudioDriver.load(device).offline(audio, ("auto", 1.0), out_fps=fps, return_phones=True)
+        post = post[: len(acts)]
+        if len(post) < len(acts):
+            post = np.concatenate([post, np.repeat(post[-1:], len(acts) - len(post), 0)])
+        tongue = tongue_from_posteriors(post, fps)
     return Animation(fps, acts.astype(np.float32), head, np.zeros((len(acts), 2), np.float32),
-                     audio if len(audio) else None, 16000, [], [], engine)
+                     audio if len(audio) else None, 16000, [], [], engine, tongue)

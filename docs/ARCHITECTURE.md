@@ -92,7 +92,22 @@ targets come from the text controller (distillation). Noise, gain, EQ and
 reverb augmentation are applied. Auxiliary heads give phoneme posteriors,
 emotion from voice, and voice activity.
 
-## 5. Life layer (`runtime/life.py`)
+## 5. Tongue (`face/tongue.py`)
+
+No corpus records the tongue, so it follows phonetic targets:
+
+* alveolar tip-up for t/d/n/l/s;
+* the tip between the teeth for th/dh;
+* blade up for sh/ch;
+* dorsum up for k/g;
+* curled for r;
+* front-high for ee, back-high for oo, low for ah.
+
+Critical consonants dominate the blend, and zero-phase anticipatory
+smoothing models coarticulation. In live and mocap modes, the audio model's
+phoneme posteriors drive it.
+
+## 6. Life layer (`runtime/life.py`)
 
 Behaviours that aren't driven by speech:
 
@@ -102,7 +117,7 @@ Behaviours that aren't driven by speech:
 * **Head drift**: band-limited, on top of the controller's prosodic head
   motion.
 
-## 6. Outputs (`runtime/outputs.py`, `export3d.py`, `video.py`, `web/`, `blender/`)
+## 7. Outputs (`runtime/outputs.py`, `export3d.py`, `video.py`, `web/`, `blender/`)
 
 * **ARKit 52**: learned from frames that have both a muscle fit and tracked
   blendshapes. Supports VMC (VSeeFace / Warudo / VNyan), Perfect Sync VRM,

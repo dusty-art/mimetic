@@ -13,7 +13,20 @@ dependencies = [
     "pillow",
     "moderngl",
     "tqdm",
+    "kokoro>=0.9",
+    "misaki[en]",
+    "phonemizer",
+    "transformers",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-osc",
+    "websockets",
+    "sounddevice",
+    "matplotlib",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
 [project.scripts]
 mimetic = "mimetic.cli:main"

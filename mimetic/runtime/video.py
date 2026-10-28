@@ -79,7 +79,8 @@ def render_video(anim, out, size=(512, 512), fps=None, show_muscles=False, yaw=0
             J = jaws[k]
             img = r.render(verts[k], act=anim.acts[k], jaw=(J[:3, :3], J[:3, 3]), head=head_matrix(anim.head[k]),
                            gaze=tuple(anim.gaze[k]), show_muscles=show_muscles,
-                           skin_alpha=0.7 if show_muscles else 1.0)
+                           skin_alpha=0.7 if show_muscles else 1.0,
+                           tongue=None if anim.tongue is None else anim.tongue[k])
             if label is not None:
                 img = _caption(img, label(k / anim.fps) if callable(label) else label)
             p.stdin.write(img.tobytes())

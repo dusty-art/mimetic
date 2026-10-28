@@ -76,7 +76,7 @@ function f16(b64) { const h = dec(b64, Uint16Array); const out = new Float32Arra
   for (let i=0;i<h.length;i++){ const x=h[i], s=(x&0x8000)?-1:1, e=(x>>10)&31, m=x&1023;
     out[i] = e===0 ? s*Math.pow(2,-14)*(m/1024) : e===31 ? (m?NaN:s*Infinity) : s*Math.pow(2,e-15)*(1+m/1024); } return out; }
 
-let M, rest, S, jawW, nSub, skin, eyes=[], lowerGroup, muscleLines, clip=null, audioCtx=null, src=null, t0=0, raf=null;
+let M, rest, S, jawW, nSub, skin, eyes=[], lowerGroup, muscleLines, tongueMesh, clip=null, audioCtx=null, src=null, t0=0, raf=null;
 const scene = new THREE.Scene();
 const view = $("view");
 const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
@@ -128,13 +128,16 @@ async function init() {
   g.setIndex(new THREE.BufferAttribute(new Uint32Array(faces), 1)); g.computeVertexNormals();
   skin = new THREE.Mesh(g, new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.62, metalness:0, side:THREE.DoubleSide}));
   scene.add(skin);
-  const cav = new THREE.Mesh(new THREE.SphereGeometry(1,24,12), new THREE.MeshBasicMaterial({color:0x2a0b0d}));
+  const cav = new THREE.Mesh(new THREE.SphereGeometry(1,24,12), new THREE.MeshBasicMaterial({color:0x2a0b0d, side:THREE.BackSide}));
   cav.scale.set(2.3,1.7,2.0); cav.position.set(0,-4.6,2.9); scene.add(cav);
   scene.add(arch(-3.55,-4.18,4.85));
   lowerGroup = new THREE.Group(); lowerGroup.matrixAutoUpdate = false;
   lowerGroup.add(arch(-4.38,-5.0,4.6,1.95,1.6,0xe6e2d6));
-  const tongue = new THREE.Mesh(new THREE.SphereGeometry(1,24,12), new THREE.MeshStandardMaterial({color:0xb35254, roughness:0.4}));
-  tongue.scale.set(1.5,0.45,1.7); tongue.position.set(0,-4.85,3.1); lowerGroup.add(tongue); scene.add(lowerGroup);
+  const tg = new THREE.BufferGeometry();
+  tg.setAttribute("position", new THREE.BufferAttribute(dec(M.tongue_rest, Float32Array), 3));
+  tg.setIndex(new THREE.BufferAttribute(new Uint32Array(dec(M.tongue_faces, Int32Array)), 1)); tg.computeVertexNormals();
+  tongueMesh = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({color:0xb35254, roughness:0.4, side:THREE.DoubleSide}));
+  lowerGroup.add(tongueMesh); scene.add(lowerGroup);
   for (const e of M.eyes) {
     const tex = document.createElement("canvas"); tex.width=256; tex.height=128; const c=tex.getContext("2d");
     c.fillStyle="#f2f0ec"; c.fillRect(0,0,256,128);
@@ -160,6 +163,10 @@ async function init() {
 function insertTag(e) { const t=$("txt"); const s=t.selectionStart; const tag = e==="neutral" ? "[neutral] " : `[${e}:0.8] `;
   t.value = t.value.slice(0,s)+tag+t.value.slice(s); t.focus(); }
 
+function setTongue(tv) {
+  if (!tv || !tongueMesh) return;
+  const p = tongueMesh.geometry.attributes.position; p.array.set(tv); p.needsUpdate = true; tongueMesh.geometry.computeVertexNormals();
+}
 function setFrame(verts, acts, head, gaze) {
   const pos = skin.geometry.attributes.position;
   pos.array.set(subdivide(verts)); pos.needsUpdate = true; skin.geometry.computeVertexNormals();
@@ -194,6 +201,7 @@ function loop() {
     const t = audioCtx.currentTime - t0; const f = Math.min(clip.n-1, Math.max(0, Math.floor(t*clip.fps)));
     const nA = M.names.length, N3 = M.n*3;
     setFrame(clip.verts.subarray(f*N3,(f+1)*N3), clip.acts.subarray(f*nA,(f+1)*nA), null, clip.gaze.subarray(2*f,2*f+2));
+    if (clip.tongue) { const T3 = M.n_tongue*3; setTongue(clip.tongue.subarray(f*T3,(f+1)*T3)); }
     const ph = clip.phonemes.find(p=>p[0]<=t && t<p[1]); $("ph").textContent = ph ? ph[2] : "—";
     const em = clip.emotions.find(p=>p[0]<=t && t<p[1]); if (em) $("em").textContent = em[2] + (em[3]? " "+em[3].toFixed(1):"");
     if (t > clip.n/clip.fps) clip.playing=false;
@@ -207,7 +215,8 @@ async function speak() {
   const r = await fetch("/api/say", {method:"POST", headers:{"content-type":"application/json"},
     body: JSON.stringify({text:$("txt").value, voice:$("voice").value, gain:parseFloat($("gain").value), expressiveness:parseFloat($("expr").value)})});
   const j = await r.json();
-  clip = { fps:j.fps, n:j.n, acts:dec(j.acts, Float32Array), verts:f16(j.verts), gaze:dec(j.gaze, Float32Array), phonemes:j.phonemes, emotions:j.emotions, audio:j.audio };
+  clip = { fps:j.fps, n:j.n, acts:dec(j.acts, Float32Array), verts:f16(j.verts), gaze:dec(j.gaze, Float32Array), phonemes:j.phonemes, emotions:j.emotions, audio:j.audio,
+           tongue: j.tongue ? f16(j.tongue) : null };
   $("status").textContent = `${(j.n/j.fps).toFixed(1)} s of animation in ${((performance.now()-t)/1000).toFixed(1)} s.`;
   $("say").disabled = false; $("replay").disabled = false; play();
 }
@@ -229,7 +238,7 @@ async function toggleMic() {
   micNode = micCtx.createScriptProcessor(512, 1, 1);
   ws = new WebSocket(`ws://${location.host}/ws/live`);
   ws.onopen = () => { ws.send(JSON.stringify({emotion:$("lemo").value, intensity:0.8})); };
-  ws.onmessage = (ev) => { const j = JSON.parse(ev.data); setFrame(f16(j.verts), j.acts, null, null);
+  ws.onmessage = (ev) => { const j = JSON.parse(ev.data); setFrame(f16(j.verts), j.acts, null, null); if (j.tongue) setTongue(f16(j.tongue));
     if (j.emotion) { let bi=0; j.emotion.forEach((p,i)=>{ if (p>j.emotion[bi]) bi=i; }); $("em").textContent = EMOS[bi]; } };
   micNode.onaudioprocess = (e) => { if (ws && ws.readyState===1) ws.send(e.inputBuffer.getChannelData(0).slice(0).buffer); };
   srcN.connect(micNode); micNode.connect(micCtx.destination);

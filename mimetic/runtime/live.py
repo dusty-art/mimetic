@@ -35,8 +35,9 @@ class AudioDriver:
         self.state = self.m.init_state(1, self.device)
 
     @torch.no_grad()
-    def offline(self, audio16k, emotion=("neutral", 0.0), out_fps=30.0):
-        """Whole-file inference; returns (T, N_ACT) at out_fps, aligned to the audio (lookahead removed)."""
+    def offline(self, audio16k, emotion=("neutral", 0.0), out_fps=30.0, return_phones=False):
+        """Whole-file inference; returns (T, N_ACT) at out_fps, aligned to the audio (lookahead removed).
+        With return_phones, also the phone posteriors (T, N_PHONES) that drive the tongue."""
         wav = torch.as_tensor(audio16k, dtype=torch.float32, device=self.device)[None]
         wav = torch.nn.functional.pad(wav, (0, HOP * (self.m.lookahead + 2)))
         e = torch.tensor([EMOTIONS.index(emotion[0]) if emotion[0] != "auto" else len(EMOTIONS)], device=self.device)
@@ -45,7 +46,11 @@ class AudioDriver:
         t_in = (np.arange(len(acts)) * HOP + N_FFT / 2) / SR
         n_out = int(np.ceil(len(audio16k) / SR * out_fps))
         t_out = np.arange(n_out) / out_fps
-        return np.stack([np.interp(t_out, t_in, acts[:, k]) for k in range(acts.shape[1])], -1).astype(np.float32)
+        res = lambda x: np.stack([np.interp(t_out, t_in, x[:, k]) for k in range(x.shape[1])], -1).astype(np.float32)
+        if return_phones:
+            post = torch.softmax(out["phone"][0, self.m.lookahead:], -1).cpu().numpy()
+            return res(acts), res(post)
+        return res(acts)
 
     @torch.no_grad()
     def push(self, chunk16k: np.ndarray, emotion=("auto", 1.0)):
@@ -62,6 +67,17 @@ class AudioDriver:
         e = torch.tensor([EMOTIONS.index(emotion[0]) if emotion[0] != "auto" else len(EMOTIONS)], device=self.device)
         out, self.state = self.m.stream(mel, e, torch.tensor([float(emotion[1])], device=self.device), self.state)
         acts = out["acts"][0].cpu().numpy()
+        from mimetic.face.tongue import CRIT, TARGETS
+        post = torch.softmax(out["phone"][0], -1).cpu().numpy()
+        # Live tongue: first-order approach to the posterior-weighted articulatory target.
+        if not hasattr(self, "tongue"):
+            self.tongue = np.zeros(5, np.float32)
+        tongues = []
+        for p in post:
+            k = 0.25 * (0.6 + 0.8 * float(p @ CRIT))
+            self.tongue = self.tongue + k * (p @ TARGETS - self.tongue)
+            tongues.append(self.tongue.copy())
+        self.last_tongue = tongues
         self.last_emotion = torch.softmax(out["emotion"][0, -1], -1).cpu().numpy()
         self.last_vad = torch.sigmoid(out["vad"][0, -1]).item()
         return list(acts)

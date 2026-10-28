@@ -112,7 +112,7 @@ def gaze_to_arkit(gaze):
 
 
 @torch.no_grad()
-def arkit_from_acts(engine, acts, gaze=None):
+def arkit_from_acts(engine, acts, gaze=None, tongue=None):
     a = torch.as_tensor(acts, dtype=torch.float32, device=engine.device)
     facs = facs_arkit(np.asarray(acts, np.float32))
     bs = np.zeros((len(acts), len(ARKIT)), np.float32)
@@ -129,6 +129,11 @@ def arkit_from_acts(engine, acts, gaze=None):
         for k, v in gaze_to_arkit(gaze).items():
             bs[:, ARKIT.index(k)] = v
     return np.clip(bs, 0, 1)
+
+
+def tongue_out(tongue):
+    """ARKit tongueOut from the tongue track: tip forward past the teeth (th / dh)."""
+    return np.clip((np.asarray(tongue)[:, 1] - 0.15) / 0.35, 0, 1)
 
 
 # ---------------------------------------------------------------- VTube Studio / Live2D
@@ -173,6 +178,7 @@ def write_livelink_csv(path, anim):
                                                        "LeftEyePitch", "LeftEyeRoll", "RightEyeYaw",
                                                        "RightEyePitch", "RightEyeRoll"]
     idx = {n: ARKIT.index(n) if n in ARKIT else None for n in ARKIT_CANONICAL_ORDER}
+    tout = tongue_out(anim.tongue) if anim.tongue is not None else np.zeros(anim.n)
     with open(path, "w") as f:
         f.write(",".join(cols) + "\n")
         for t in range(anim.n):
@@ -181,7 +187,8 @@ def write_livelink_csv(path, anim):
             ss, fr = int(sec) % 60, int((sec % 1) * anim.fps)
             frac = (sec * anim.fps) % 1
             tc = f"{hh:02d}:{mm:02d}:{ss:02d}:{fr:02d}.{int(frac * 1000):03d}"
-            vals = [bs[t, idx[n]] if idx[n] is not None else 0.0 for n in ARKIT_CANONICAL_ORDER]
+            vals = [bs[t, idx[n]] if idx[n] is not None else (tout[t] if n == "tongueOut" else 0.0)
+                    for n in ARKIT_CANONICAL_ORDER]
             h = anim.head[t]
             g = anim.gaze[t]
             rot = [h[1], h[0], h[2], g[0], g[1], 0.0, g[0], g[1], 0.0]
@@ -193,6 +200,9 @@ def write_json(path, anim, include_vertices=False):
            "activations": np.round(anim.acts, 4).tolist(), "arkit_names": ARKIT,
            "arkit": np.round(anim.arkit, 4).tolist(), "head_pitch_yaw_roll": np.round(anim.head, 4).tolist(),
            "gaze_yaw_pitch": np.round(anim.gaze, 4).tolist(),
+           "tongue_names": ["tip_up", "tip_fwd", "front_up", "back_up", "low"],
+           "tongue_cm": np.round(anim.tongue, 4).tolist() if anim.tongue is not None else None,
+           "tongueOut": np.round(tongue_out(anim.tongue), 4).tolist() if anim.tongue is not None else None,
            "phonemes": [[round(a, 3), round(b, 3), p] for a, b, p in anim.segments],
            "emotions": [[round(a, 3), round(b, 3), e, round(i, 3)] for a, b, e, i in anim.emotion_spans]}
     if include_vertices:
@@ -209,9 +219,11 @@ class VMCSender:
         from pythonosc.udp_client import SimpleUDPClient
         self.c = SimpleUDPClient(host, port)
 
-    def send(self, arkit_row, head_row):
+    def send(self, arkit_row, head_row, tongue_out_value=None):
         for n, v in zip(ARKIT, arkit_row):
             self.c.send_message("/VMC/Ext/Blend/Val", [n, float(v)])
+        if tongue_out_value is not None:
+            self.c.send_message("/VMC/Ext/Blend/Val", ["tongueOut", float(tongue_out_value)])
         self.c.send_message("/VMC/Ext/Blend/Apply", [])
         p, y, r = [float(v) for v in head_row]
         cy, sy, cp, sp, cr, sr = math.cos(y / 2), math.sin(y / 2), math.cos(p / 2), math.sin(p / 2), math.cos(r / 2), math.sin(r / 2)

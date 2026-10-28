@@ -59,6 +59,7 @@ Each export writes:
 | `animation.json` | muscle activations, ARKit weights, head, gaze, phonemes and emotion spans per frame |
 | `livelink.csv` | Live Link Face format: Unreal / MetaHuman, Blender Live Link importers, iClone |
 | `head.obj` + `head.pc2` | the simulated head and its per-frame skin (Mesh Cache modifier in Blender, Maya, 3ds Max) |
+| `tongue.obj` + `tongue.pc2` | the articulated tongue, jaw-relative |
 | `jaw.npy`, `gaze.npy`, `head_rotation.npy` | rigid tracks |
 | `audio.wav` | the voice |
 
@@ -88,5 +89,6 @@ Other channels come from a FACS mapping applied directly to the muscles:
 * frown ← depressor anguli oris
 * dimple ← buccinator
 
-`tongueOut` and `cheekPuff` stay at 0; the model has no tongue protrusion or
+`tongueOut` follows the articulatory tongue: it peaks on "th"/"dh", where the
+tip sits between the teeth. `cheekPuff` stays at 0, since the model has no
 air pressure.

@@ -116,6 +116,13 @@ def import_head(context, outdir, fps):
         ob.data.materials.append(m)
         for p in ob.data.polygons:
             p.use_smooth = True
+        if name == "tongue" and os.path.exists(os.path.join(outdir, "tongue.pc2")):
+            tm = ob.modifiers.new("MimeticTongue", "MESH_CACHE")
+            tm.cache_format = "PC2"
+            tm.filepath = os.path.join(outdir, "tongue.pc2")
+            tm.frame_start = 1
+            tm.forward_axis = "POS_Y"
+            tm.up_axis = "POS_Z"
         if parent is not None:
             # Jaw-relative geometry is stored at the rest pose, so the child follows the jaw keys directly.
             ob.parent = parent

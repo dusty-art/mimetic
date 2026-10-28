@@ -62,7 +62,7 @@ def jaw_tracks(acts, tmj=(0.0, 0.3, -1.6)):
 def write_props(outdir):
     """Teeth, tongue, eyes and oral cavity as OBJ (Blender space); lower teeth and tongue are jaw-relative."""
     from pathlib import Path
-    from mimetic.face.render import teeth_arch, uv_sphere
+    from mimetic.face.render import cavity_bowl, teeth_arch, uv_sphere
     from mimetic.face.sim import FaceSim
     outdir = Path(outdir)
     sim = FaceSim(calibrate=False)
@@ -72,7 +72,8 @@ def write_props(outdir):
     write_obj(outdir / "lower_teeth.obj", to_blender(v), f, "lower_teeth")
     sv, sf = uv_sphere(1.0, 24, 12)
     write_obj(outdir / "tongue.obj", to_blender(sv * np.array([1.5, 0.45, 1.7]) + np.array([0.0, -4.85, 3.1])), sf, "tongue")
-    write_obj(outdir / "mouth_cavity.obj", to_blender(sv * np.array([2.3, 1.7, 2.0]) + np.array([0.0, -4.6, 2.9])), sf[:, ::-1], "mouth_cavity")
+    cv, cf = cavity_bowl()
+    write_obj(outdir / "mouth_cavity.obj", to_blender(cv), cf, "mouth_cavity")
     ev, ef = uv_sphere(1.0, 96, 64)
     for (c, r), side in zip(sim.eyes, ("R", "L")):
         write_obj(outdir / f"eye_{side}.obj", to_blender(ev * r + c), ef, f"eye_{side}")
@@ -82,3 +83,15 @@ def write_props(outdir):
         remap[keep] = np.arange(keep.sum())
         cf = np.array([[remap[a], remap[b], remap[c_]] for a, b, c_ in ef if keep[a] and keep[b] and keep[c_]])
         write_obj(outdir / f"iris_{side}.obj", to_blender(ev[keep] * (r + 0.01) + c), cf, f"iris_{side}")
+
+
+def write_tongue_cache(outdir, anim):
+    """Per-frame tongue vertices (jaw-relative, Blender space) as a PC2 cache for the tongue object."""
+    from pathlib import Path
+    from mimetic.face.tongue import tongue_mesh
+    if anim.tongue is None:
+        return
+    frames = np.stack([to_blender(tongue_mesh(p)[0]) for p in anim.tongue])
+    v, f = tongue_mesh(np.zeros(5))
+    write_obj(Path(outdir) / "tongue.obj", to_blender(v), f, "tongue")
+    write_pc2(Path(outdir) / "tongue.pc2", frames, anim.fps)

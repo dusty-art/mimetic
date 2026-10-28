@@ -16,6 +16,7 @@ import torch
 from mimetic.data import phonemes as P
 from mimetic.data import prosody
 from mimetic.face import anatomy as A
+from mimetic.face.tongue import tongue_from_posteriors, tongue_track
 from mimetic.model.controller import EMOTIONS, SpeechEmotionController
 from mimetic.paths import CHECKPOINTS
 from mimetic.runtime import life
@@ -82,6 +83,7 @@ class Animation:
     segments: list = field(default_factory=list)
     emotion_spans: list = field(default_factory=list)
     engine: object = None
+    tongue: np.ndarray | None = None        # (T, 5) tip_up, tip_fwd, front_up, back_up, low (cm, jaw frame)
     _verts: np.ndarray | None = None
     _arkit: np.ndarray | None = None
 
@@ -94,7 +96,7 @@ class Animation:
     @property
     def arkit(self):
         if self._arkit is None:
-            self._arkit = self.engine.to_arkit(self.acts, self.gaze)
+            self._arkit = self.engine.to_arkit(self.acts, self.gaze, self.tongue)
         return self._arkit
 
     @property
@@ -157,6 +159,7 @@ class Engine:
         acts[:, self.lev] *= (1 - blink[:, None])
         head = head + life.head_drift(n, CTRL_FPS, rng)
         gaze = life.gaze_track(n, CTRL_FPS, rng)
+        self._last_tongue = tongue_track(ids, CTRL_FPS)
         return acts, head, gaze
 
     def animate_text(self, text, voice=None, style=None, fps=60.0, speech_gain=1.0, seed=0,
@@ -165,7 +168,8 @@ class Engine:
         n = int(np.ceil(utt.duration * CTRL_FPS)) + 3
         a16 = resample_audio(utt.audio, 24000)
         acts, head, gaze = self.drive(utt.segments, utt.emotion_spans, a16, n, style, speech_gain, seed, emotion_gain)
-        anim = Animation(CTRL_FPS, acts, head, gaze, utt.audio, 24000, utt.segments, utt.emotion_spans, self)
+        anim = Animation(CTRL_FPS, acts, head, gaze, utt.audio, 24000, utt.segments, utt.emotion_spans, self,
+                         self._last_tongue)
         return upsample(anim, fps) if fps != CTRL_FPS else anim
 
     def stream_text(self, text_chunks, voice=None, fps=60.0, emotion_gain=1.0, seed=0):
@@ -202,16 +206,18 @@ class Engine:
             aligner = aligner or Aligner()
             segs = [(a, b, p) for a, b, p, _ in aligner.align(a16, text)]
             acts, head, gaze = self.drive(segs, spans, a16, n, seed=seed)
+            tongue = self._last_tongue
         else:
             from mimetic.runtime.live import AudioDriver
             drv = AudioDriver.load(self.device)
-            acts = drv.offline(a16, emotion)
+            acts, post = drv.offline(a16, emotion, return_phones=True)
             rng = np.random.default_rng(seed)
             n = len(acts)
             head = life.head_drift(n, CTRL_FPS, rng)
             gaze = life.gaze_track(n, CTRL_FPS, rng)
+            tongue = tongue_from_posteriors(post, CTRL_FPS)
             segs = []
-        anim = Animation(CTRL_FPS, acts, head, gaze, audio, sr, segs, spans, self)
+        anim = Animation(CTRL_FPS, acts, head, gaze, audio, sr, segs, spans, self, tongue)
         return upsample(anim, fps) if fps != CTRL_FPS else anim
 
     @torch.no_grad()
@@ -222,9 +228,9 @@ class Engine:
             out.append(self.face(a).cpu().numpy())
         return np.concatenate(out)
 
-    def to_arkit(self, acts, gaze=None):
+    def to_arkit(self, acts, gaze=None, tongue=None):
         from mimetic.runtime.outputs import arkit_from_acts
-        return arkit_from_acts(self, acts, gaze)
+        return arkit_from_acts(self, acts, gaze, tongue)
 
 
 def upsample(anim: Animation, fps: float) -> Animation:
@@ -235,4 +241,5 @@ def upsample(anim: Animation, fps: float) -> Animation:
     def interp(x):
         return np.stack([np.interp(t_out, t_in, x[:, k]) for k in range(x.shape[1])], -1).astype(np.float32)
     return Animation(fps, interp(anim.acts), interp(anim.head), interp(anim.gaze), anim.audio, anim.sr,
-                     anim.segments, anim.emotion_spans, anim.engine)
+                     anim.segments, anim.emotion_spans, anim.engine,
+                     interp(anim.tongue) if anim.tongue is not None else None)
