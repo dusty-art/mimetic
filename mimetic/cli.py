@@ -58,6 +58,7 @@ def cmd_export(a):
 
 def cmd_live(a):
     import asyncio
+    import numpy as np
     from mimetic.runtime import outputs
     from mimetic.runtime.engine import Engine
     from mimetic.runtime.live import AudioDriver, LiveSession
