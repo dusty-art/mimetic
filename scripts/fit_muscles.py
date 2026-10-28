@@ -70,7 +70,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--calibrate", action="store_true")
-    ap.add_argument("--l1", type=float, default=0.004)
+    ap.add_argument("--l1", type=float, default=0.0015)
+    ap.add_argument("--aperture", type=float, default=30.0)
     ap.add_argument("--smooth", type=float, default=0.05)
     ap.add_argument("--bs", type=int, default=48)
     args = ap.parse_args()
@@ -125,7 +126,11 @@ def main():
         l1 = (a.sum(-1) * mb).sum() / mb.sum()
         da = a[:, 1:] - a[:, :-1]
         sm = ((da ** 2).sum(-1) * mb[:, 1:] * mb[:, :-1]).sum() / mb.sum()
-        loss = rec + args.l1 * l1 + args.smooth * sm
+        # Lip contact matters more than its share of vertices: match each inner-lip gap explicitly,
+        # and never let the lips pass through each other.
+        ap_x, ap_y = MO.pair_apertures_t(x), MO.pair_apertures_t(y)
+        l_ap = ((((ap_x - ap_y) ** 2).mean(-1) + 4 * torch.relu(-ap_x).pow(2).mean(-1)) * mb).sum() / mb.sum()
+        loss = rec + args.l1 * l1 + args.smooth * sm + args.aperture * l_ap
         if cal is not None:
             loss = loss + 0.5 * cal.penalty()
         with torch.no_grad():

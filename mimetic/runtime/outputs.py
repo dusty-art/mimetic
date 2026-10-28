@@ -47,8 +47,54 @@ class ArkitMap(nn.Module):
     @classmethod
     def load(cls, path, device="cpu"):
         m = cls()
-        m.load_state_dict(torch.load(path, map_location="cpu")["state"])
+        ck = torch.load(path, map_location="cpu")
+        m.load_state_dict(ck["state"])
+        m.r2 = ck.get("r2", {})
         return m.to(device).eval()
+
+
+def facs_arkit(acts):
+    """ARKit weights straight from muscle activations via FACS (muscle -> action unit -> blendshape).
+
+    Used for channels the learned map cannot predict reliably (rare in tracked video).
+    Sides: Mimetic "_L" = the person's left = ARKit "Left".
+    """
+    nm = A.MUSCLE_NAMES
+    g = lambda n: acts[:, nm.index(n)]
+    out = {}
+    for s, S in (("L", "Left"), ("R", "Right")):
+        out[f"eyeBlink{S}"] = g(f"orbicularis_oculi_palpebral_{s}")
+        out[f"eyeSquint{S}"] = 0.7 * g(f"orbicularis_oculi_orbital_{s}")
+        out[f"eyeWide{S}"] = g(f"levator_palpebrae_{s}")
+        out[f"cheekSquint{S}"] = g(f"orbicularis_oculi_orbital_{s}")
+        out[f"noseSneer{S}"] = g(f"levator_labii_alaeque_nasi_{s}")
+        out[f"mouthSmile{S}"] = g(f"zygomaticus_major_{s}")
+        out[f"mouthFrown{S}"] = g(f"depressor_anguli_oris_{s}")
+        out[f"mouthStretch{S}"] = np.clip(g(f"risorius_{s}") + 0.5 * g(f"platysma_{s}"), 0, 1)
+        out[f"mouthDimple{S}"] = g(f"buccinator_{s}")
+        out[f"mouthPress{S}"] = 0.5 * (g(f"orbicularis_oris_marginal_upper_{s}") + g(f"orbicularis_oris_marginal_lower_{s}"))
+        out[f"mouthUpperUp{S}"] = g(f"levator_labii_superioris_{s}")
+        out[f"mouthLowerDown{S}"] = g(f"depressor_labii_inferioris_{s}")
+        out[f"browDown{S}"] = np.maximum(g(f"corrugator_{s}"), g(f"depressor_supercilii_{s}"))
+        out[f"browOuterUp{S}"] = g(f"frontalis_lateral_{s}")
+    out["browInnerUp"] = 0.5 * (g("frontalis_medial_L") + g("frontalis_medial_R"))
+    out["mouthRollUpper"] = 0.5 * (g("orbicularis_oris_marginal_upper_L") + g("orbicularis_oris_marginal_upper_R"))
+    out["mouthRollLower"] = 0.5 * (g("orbicularis_oris_marginal_lower_L") + g("orbicularis_oris_marginal_lower_R"))
+    out["mouthShrugLower"] = 0.5 * (g("mentalis_L") + g("mentalis_R"))
+    out["mouthShrugUpper"] = 0.25 * (g("mentalis_L") + g("mentalis_R"))
+    pucker = 0.25 * sum(g(f"orbicularis_oris_peripheral_{u}_{s}") for u in ("upper", "lower") for s in "LR")
+    out["mouthPucker"] = pucker
+    out["mouthFunnel"] = np.clip(pucker * (0.5 + 2 * g("jaw_open")), 0, 1)
+    out["jawOpen"] = np.clip(1.8 * g("jaw_open"), 0, 1)
+    out["jawForward"] = g("jaw_protrude")
+    out["jawLeft"] = g("jaw_lateral_L")
+    out["jawRight"] = g("jaw_lateral_R")
+    out["mouthLeft"] = np.clip(g("zygomaticus_major_L") + g("risorius_L") - g("zygomaticus_major_R") - g("risorius_R"), 0, 1) * 0.5
+    out["mouthRight"] = np.clip(g("zygomaticus_major_R") + g("risorius_R") - g("zygomaticus_major_L") - g("risorius_L"), 0, 1) * 0.5
+    out["mouthClose"] = np.clip(g("jaw_open") * 2 - 1.5 * out["mouthLowerDownLeft"] - 1.5 * out["mouthUpperUpLeft"], 0, 1) * \
+        0.5 * (g("orbicularis_oris_marginal_upper_L") + g("orbicularis_oris_marginal_lower_L") > 0.2)
+    out["cheekPuff"] = np.zeros(len(acts))
+    return out
 
 
 def gaze_to_arkit(gaze):
@@ -68,19 +114,17 @@ def gaze_to_arkit(gaze):
 @torch.no_grad()
 def arkit_from_acts(engine, acts, gaze=None):
     a = torch.as_tensor(acts, dtype=torch.float32, device=engine.device)
+    facs = facs_arkit(np.asarray(acts, np.float32))
+    bs = np.zeros((len(acts), len(ARKIT)), np.float32)
+    for k, v in facs.items():
+        bs[:, ARKIT.index(k)] = v
     if engine.arkit_map is not None:
-        bs = engine.arkit_map(a).cpu().numpy()
-    else:
-        bs = np.zeros((len(acts), len(ARKIT)), np.float32)
-        nm = A.MUSCLE_NAMES
-        def g(n): return acts[:, nm.index(n)]
-        simple = {"jawOpen": g("jaw_open"), "eyeBlinkLeft": g("orbicularis_oculi_palpebral_L"),
-                  "eyeBlinkRight": g("orbicularis_oculi_palpebral_R"),
-                  "mouthSmileLeft": g("zygomaticus_major_L"), "mouthSmileRight": g("zygomaticus_major_R"),
-                  "browInnerUp": (g("frontalis_medial_L") + g("frontalis_medial_R")) / 2,
-                  "mouthPucker": (g("orbicularis_oris_peripheral_upper_L") + g("orbicularis_oris_peripheral_lower_R")) / 2}
-        for k, v in simple.items():
-            bs[:, ARKIT.index(k)] = v
+        # Learned map where it predicts real faces well, FACS mapping elsewhere.
+        learned = engine.arkit_map(a).cpu().numpy()
+        r2 = getattr(engine.arkit_map, "r2", {})
+        for j, n in enumerate(ARKIT):
+            if r2.get(n, 0.0) >= 0.3:
+                bs[:, j] = learned[:, j]
     if gaze is not None:
         for k, v in gaze_to_arkit(gaze).items():
             bs[:, ARKIT.index(k)] = v

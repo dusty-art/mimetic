@@ -145,8 +145,10 @@ def main():
         model.train()
         b = to_dev(train.sample(args.bs, rng), dev)
         spk = torch.where(torch.rand(args.bs, device=dev) < 0.3, torch.full_like(b["spk"], n_avg), b["spk"])
+        keep = (torch.rand(args.bs, device=dev) < 0.5).float()
+        ctx = (torch.rand(args.bs, device=dev) < 0.7).float()
         out, head = model(b["phone"], b["ppos"], b["pdur"], b["prosody"], b["emo"], b["inten"], spk,
-                          pad_mask=b["mask"] == 0)
+                          pad_mask=b["mask"] == 0, emo_prosody_keep=keep, emo_ctx_keep=ctx)
         m = b["mask"]
         if direct:
             tgt = b["coef"] / pstd

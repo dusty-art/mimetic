@@ -84,7 +84,7 @@ class SpeechEmotionController(nn.Module):
         nn.init.zeros_(self.speech_out[1].weight); nn.init.zeros_(self.speech_out[1].bias)
 
     def forward(self, phone, ppos, pdur, prosody, emotion, intensity, speaker, pad_mask=None,
-                speech_gain: float = 1.0, return_parts: bool = False):
+                speech_gain: float = 1.0, return_parts: bool = False, emo_prosody_keep=None, emo_ctx_keep=None):
         """phone/ppos/pdur/prosody: (B,T[,4]); emotion (B,) or (B,T) ids; intensity (B,) or (B,T); speaker (B,)."""
         B, T = phone.shape
         dev = phone.device
@@ -100,7 +100,11 @@ class SpeechEmotionController(nn.Module):
         if intensity.dim() == 1:
             intensity = intensity[:, None].expand(B, T)
         inten = intensity[..., None].float()
-        e = torch.cat([self.emo_emb(emotion) * inten, inten, prosody, h], -1)
+        # The emotion pathway may see prosody, but is trained to work without it (TTS prosody is neutral).
+        pr_e = prosody if emo_prosody_keep is None else prosody * emo_prosody_keep[:, None, None]
+        # ...and sometimes without the speech context, so emotion does not become sentence-specific.
+        h_e = h if emo_ctx_keep is None else h * emo_ctx_keep[:, None, None]
+        e = torch.cat([self.emo_emb(emotion) * inten, inten, pr_e, h_e], -1)
         g = self.emo_inp(e) + sinusoid(T, self.emo_inp.out_features, dev)[None]
         for blk in self.emo_blocks:
             g = blk(g, pad_mask)

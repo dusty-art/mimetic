@@ -1,5 +1,8 @@
 """Learn muscles -> ARKit blendshapes from frames where both a muscle fit and tracked blendshapes exist.
 
+Targets are each speaker's blendshape scores relative to their own resting level (10th percentile),
+so the map outputs ~0 for a neutral face, as avatars expect.
+
 Gaze channels (eyeLook*) are excluded: they are driven by the gaze track, not by muscles.
 """
 from __future__ import annotations
@@ -30,6 +33,9 @@ def main():
             continue
         a = np.load(p).astype(np.float32)
         b = np.load(MO.MOTION / f"{n}.npz")["bs"][:, 1:].astype(np.float32)
+        # Blendshape scores carry per-person offsets (face shape); avatars expect 0 at neutral.
+        # Predict the change from this speaker's own resting level.
+        b = np.clip(b - np.percentile(b, 10, axis=0, keepdims=True), 0, 1)
         if str(n) in TEST:
             te_a.append(a); te_b.append(b)
         else:
@@ -55,7 +61,7 @@ def main():
         ss_tot = ((Bt - Bt.mean(0)) ** 2).sum(0)
         r2 = (1 - ss_res / ss_tot.clamp_min(1e-6)).cpu().numpy()
     rep = {n: float(r) for n, r in zip(ARKIT, r2) if not n.startswith("eyeLook")}
-    torch.save({"state": m.state_dict()}, CHECKPOINTS / "arkit_map.pt")
+    torch.save({"state": m.state_dict(), "r2": {n: float(r) for n, r in zip(ARKIT, r2)}}, CHECKPOINTS / "arkit_map.pt")
     EXPERIMENTS.mkdir(exist_ok=True)
     (EXPERIMENTS / "arkit_map_r2.json").write_text(json.dumps(rep, indent=1))
     good = {k: round(v, 2) for k, v in sorted(rep.items(), key=lambda kv: -kv[1])}

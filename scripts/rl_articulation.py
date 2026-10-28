@@ -166,11 +166,16 @@ def evaluate(env, pol, g):
     return torch.stack(errs[HOLD // 2:]).mean().item()
 
 
-def main(budget=3_000_000):
+def main(budget=3_000_000, methods=("apg", "ppo"), out_name="rl_articulation.json"):
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
     face = load_face_model(dev)
     out = {}
-    for method in ("apg", "ppo"):
+    # Reference: a policy that never moves (error = how far the targets are from rest).
+    env0 = Env(face, dev, B=1024)
+    goals = env0.sample_goals(torch.Generator().manual_seed(99))
+    out["zero_policy_err_mm"] = ((env0.rest_m[None] - goals).abs() * 10)[..., :4].mean().item()
+    print(f"zero policy: {out['zero_policy_err_mm']:.3f} mm", flush=True)
+    for method in methods:
         torch.manual_seed(0)
         g = torch.Generator().manual_seed(0)
         env = Env(face, dev, B=256 if method == "apg" else 512)
@@ -183,8 +188,10 @@ def main(budget=3_000_000):
                        "wall_s": time.time() - t0}
         print(f"{method}: final lip-target error {ev:.3f} mm after {budget} env steps ({time.time() - t0:.0f}s)", flush=True)
     EXPERIMENTS.mkdir(exist_ok=True)
-    (EXPERIMENTS / "rl_articulation.json").write_text(json.dumps(out))
+    (EXPERIMENTS / out_name).write_text(json.dumps(out))
 
 
 if __name__ == "__main__":
-    main(int(float(sys.argv[1])) if len(sys.argv) > 1 else 3_000_000)
+    budget = int(float(sys.argv[1])) if len(sys.argv) > 1 else 3_000_000
+    methods = tuple(sys.argv[2].split(",")) if len(sys.argv) > 2 else ("apg", "ppo")
+    main(budget, methods, sys.argv[3] if len(sys.argv) > 3 else "rl_articulation.json")

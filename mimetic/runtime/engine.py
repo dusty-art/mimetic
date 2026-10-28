@@ -115,7 +115,9 @@ class Engine:
         self.lev = [A.MUSCLE_NAMES.index(f"levator_palpebrae_{s}") for s in "RL"]
 
     @classmethod
-    def load(cls, name="controller", device=None):
+    def load(cls, name=None, device=None):
+        import os
+        name = name or os.environ.get("MIMETIC_CONTROLLER", "controller")
         device = device or "cpu"
         ck = torch.load(CHECKPOINTS / f"{name}.pt", map_location="cpu", weights_only=False)
         ctrl = SpeechEmotionController(n_speakers=ck["n_speakers"])

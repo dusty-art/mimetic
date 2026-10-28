@@ -9,7 +9,8 @@ Metrics (canonical face space):
   MVE      mean vertex error over the face (mm)
   ApCorr   Pearson correlation of lip aperture with ground truth (mean over clips)
   Closure  share of p/b/m occurrences where the lips close (min aperture < 1 mm)
-  EmoAcc   emotion accuracy of a classifier trained on real faces, applied to the system's faces
+  EmoAcc   emotion accuracy of a geometric expression classifier (trained on real faces and their muscle
+           fits) applied to the system's faces
   Jerk     mean squared third difference of lip motion relative to ground truth (1.0 = as smooth as real)
   Pen      frames with lips interpenetrating (aperture < -0.5 mm), %
 """
@@ -42,7 +43,7 @@ LIPS = C.UPPER_INNER + C.LOWER_INNER + C.UPPER_OUTER + C.LOWER_OUTER
 
 
 class EmoClassifier(nn.Module):
-    def __init__(self, k=96, n=len(EMOTIONS)):
+    def __init__(self, k=14, n=len(EMOTIONS)):
         super().__init__()
         self.net = nn.Sequential(nn.Conv1d(k, 128, 5, padding=2), nn.GELU(), nn.Conv1d(128, 128, 5, padding=4, dilation=2),
                                  nn.GELU(), nn.Conv1d(128, 128, 5, padding=8, dilation=4), nn.GELU())
@@ -54,22 +55,48 @@ class EmoClassifier(nn.Module):
         return self.out(h)
 
 
+def geo_features(x, rest):
+    """Interpretable expression geometry, comparable across any face representation (cm, re rest)."""
+    d = x - rest
+    m = measures(x)
+    r = measures(rest[None])
+    f = [m["aperture"] - r["aperture"], m["width"] - r["width"], m["protrusion"] - r["protrusion"],
+         (d[..., 61, 1] + d[..., 291, 1]) / 2,                       # mouth corners up/down
+         d[..., 0, 1], d[..., 17, 1],                                 # upper / lower lip
+         (d[..., 105, 1] + d[..., 334, 1]) / 2, (d[..., 107, 1] + d[..., 336, 1]) / 2,   # brows outer-mid / inner
+         (d[..., 107, 0] - d[..., 336, 0]) / 2,                       # brows drawn together
+         ((x[..., 159, 1] - x[..., 145, 1]) + (x[..., 386, 1] - x[..., 374, 1])) / 2 - ((rest[159, 1] - rest[145, 1]) + (rest[386, 1] - rest[374, 1])) / 2,
+         (d[..., 50, 1] + d[..., 280, 1]) / 2,                        # cheeks raised
+         (d[..., 48, 1] + d[..., 278, 1]) / 2,                        # nostril wings (nose wrinkle)
+         d[..., 152, 1],                                              # chin / jaw
+         (d[..., 61, 1] - d[..., 291, 1])]                            # asymmetry (contempt)
+    return torch.stack(f, -1) * 10
+
+
 def coef_of(x, rest, comps, mean, pstd):
     d = (x - rest).reshape(*x.shape[:-2], -1)
     return ((d - mean) @ comps.T) / pstd
 
 
-def train_emotion_classifier(train, comps, mean, pstd, dev, steps=3000):
-    clf = EmoClassifier(comps.shape[0]).to(dev)
+def train_emotion_classifier(train, comps, mean, pstd, dev, face, steps=3000):
+    """Emotion judge on expression geometry, trained on real tracked faces and their muscle fits alike,
+    so it rewards the expression itself rather than any one representation's texture."""
+    clf = EmoClassifier(14).to(dev)
     opt = torch.optim.AdamW(clf.parameters(), lr=1e-3, weight_decay=1e-3)
     rng = np.random.default_rng(1)
+    rest = face.rest
     emo_clips = [i for i, c in enumerate(train.clips) if c["dataset"] in ("ravdess", "cremad")]
     for s in range(steps):
         idx = rng.choice(emo_clips, 64)
         b = to_dev(train.collate([train.clips[i] for i in idx], rng), dev)
-        c = b["coef"] / pstd
-        c = c + 0.05 * torch.randn_like(c)
-        loss = nn.functional.cross_entropy(clf(c, b["mask"]), b["emo"])
+        m = b["mask"]
+        with torch.no_grad():
+            if s % 2 == 0:
+                x = rest + (b["coef"] @ comps + mean).view(*m.shape, -1, 3)
+            else:
+                x = face(b["acts"].reshape(-1, A.N_ACT)).view(*m.shape, -1, 3)
+            f = geo_features(x, rest)
+        loss = nn.functional.cross_entropy(clf(f + 0.05 * torch.randn_like(f), m), b["emo"])
         opt.zero_grad(); loss.backward(); opt.step()
     return clf.eval()
 
@@ -114,6 +141,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--systems", default="mimetic=controller,direct=baseline_direct,noartic=controller_noartic")
     ap.add_argument("--max-clips", type=int, default=100000)
+    ap.add_argument("--clf-steps", type=int, default=3000)
+    ap.add_argument("--out", default="eval_results.json")
     args = ap.parse_args()
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
     torch.manual_seed(0)
@@ -124,17 +153,23 @@ def main():
     comps, mean = torch.tensor(pca["comps"], device=dev), torch.tensor(pca["mean"], device=dev)
     pstd = torch.tensor(train.arr["coef"][::50].astype(np.float32).std(0), device=dev).clamp_min(1e-3)
     print("training emotion classifier on real faces...", flush=True)
-    clf = train_emotion_classifier(train, comps, mean, pstd, dev)
+    clf = train_emotion_classifier(train, comps, mean, pstd, dev, face, steps=args.clf_steps)
     vis, emo_off = viseme_tables(train)
     systems = {}
     for kv in args.systems.split(","):
         k, v = kv.split("=")
         if (CHECKPOINTS / f"{v}.pt").exists():
             systems[k] = load_ctrl(v, dev)
+    audio_drv = None
+    if (CHECKPOINTS / "audio_model.pt").exists():
+        from mimetic.data import track
+        from mimetic.paths import PROCESSED
+        from mimetic.runtime.live import AudioDriver
+        audio_drv = AudioDriver.load(dev)
     rest_ap = measures(rest[None])["aperture"].item()
     close_thr = 0.10
     clips = test.clips[: args.max_clips]
-    names = ["ground_truth", "muscle_fit", "viseme_table"] + list(systems)
+    names = ["ground_truth", "muscle_fit", "viseme_table"] + list(systems) + (["live_audio"] if audio_drv else [])
     acc = {n: {"lve": [], "mve": [], "apcorr": [], "close_hit": 0, "close_tot": 0, "emo_hit": 0, "emo_tot": 0,
                "jerk": [], "pen": [], "frames": 0} for n in names}
     t_run = {n: 0.0 for n in names}
@@ -169,6 +204,15 @@ def main():
                     torch.mps.synchronize()
                 t_run[k] += time.time() - t0
                 preds[k] = x
+            if audio_drv is not None:
+                t0 = time.time()
+                la = np.zeros((len(cl), m.shape[1], A.N_ACT), np.float32)
+                for i, c in enumerate(cl):
+                    aud = track.load_clip(PROCESSED / c["dataset"] / c["speaker"] / f"{c['clip']}.npz")["audio"]
+                    a_live = audio_drv.offline(aud, ("auto", 1.0))[: c["n"]]
+                    la[i, :len(a_live)] = a_live
+                t_run["live_audio"] += time.time() - t0
+                preds["live_audio"] = face(torch.tensor(la, device=dev).reshape(-1, A.N_ACT)).view(*m.shape, -1, 3)
             for k, x in preds.items():
                 a_ = acc[k]
                 err = (x - gt).norm(dim=-1)                                     # (B,T,N)
@@ -202,7 +246,7 @@ def main():
                 # emotion recognisability (emotional datasets only)
                 sel = torch.tensor([c["dataset"] in ("ravdess", "cremad") for c in cl], device=dev)
                 if sel.any():
-                    logits = clf(coef_of(x, rest, comps, mean, pstd)[sel], m[sel])
+                    logits = clf(geo_features(x[sel], rest), m[sel])
                     a_["emo_hit"] += int((logits.argmax(-1) == b["emo"][sel]).sum().item())
                     a_["emo_tot"] += int(sel.sum().item())
     gt_jerk = np.mean(acc["ground_truth"]["jerk"])
@@ -216,7 +260,7 @@ def main():
     res["_meta"] = {"test_clips": len(clips), "closure_threshold_cm": close_thr, "rest_aperture_cm": rest_ap,
                     "bilabial_occurrences": acc["ground_truth"]["close_tot"]}
     EXPERIMENTS.mkdir(exist_ok=True)
-    (EXPERIMENTS / "eval_results.json").write_text(json.dumps(res, indent=1))
+    (EXPERIMENTS / args.out).write_text(json.dumps(res, indent=1))
     hdr = f"{'system':14s} {'LVE mm':>7s} {'MVE mm':>7s} {'ApCorr':>7s} {'Closure':>8s} {'EmoAcc':>7s} {'Jerk':>6s} {'Pen%':>5s}"
     print(hdr)
     for k, r in res.items():

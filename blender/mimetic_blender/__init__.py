@@ -98,9 +98,11 @@ def import_head(context, outdir, fps):
         empty.keyframe_insert("location", frame=f + 1)
         empty.keyframe_insert("rotation_euler", frame=f + 1)
     # Teeth, tongue and eyes
+    eyes = {}
     for name, col, parent in (("upper_teeth", (0.93, 0.91, 0.85, 1), None), ("lower_teeth", (0.9, 0.88, 0.82, 1), empty),
                               ("tongue", (0.7, 0.32, 0.33, 1), empty), ("eye_R", (0.95, 0.94, 0.92, 1), None),
-                              ("eye_L", (0.95, 0.94, 0.92, 1), None), ("mouth_cavity", (0.16, 0.04, 0.05, 1), None)):
+                              ("eye_L", (0.95, 0.94, 0.92, 1), None), ("iris_R", (0.18, 0.1, 0.05, 1), None),
+                              ("iris_L", (0.18, 0.1, 0.05, 1), None), ("mouth_cavity", (0.16, 0.04, 0.05, 1), None)):
         path = os.path.join(outdir, f"{name}.obj")
         if not os.path.exists(path):
             continue
@@ -118,6 +120,23 @@ def import_head(context, outdir, fps):
             # Jaw-relative geometry is stored at the rest pose, so the child follows the jaw keys directly.
             ob.parent = parent
             ob.matrix_parent_inverse = mathutils.Matrix.Identity(4)
+        if name.startswith("eye_") or name.startswith("iris_"):
+            eyes.setdefault(name[-1], []).append(ob)
+    # Gaze: rotate each eyeball + iris about the eyeball centre.
+    gaze = np.load(os.path.join(outdir, "gaze.npy"))
+    for side, obs in eyes.items():
+        eye = [o for o in obs if o.name.startswith("eye_")][0]
+        centre = sum((v.co for v in eye.data.vertices), mathutils.Vector()) / len(eye.data.vertices)
+        pivot = bpy.data.objects.new(f"MimeticGaze_{side}", None)
+        context.collection.objects.link(pivot)
+        pivot.location = centre
+        for o in obs:
+            for v in o.data.vertices:
+                v.co -= centre
+            o.parent = pivot
+        for f, (yaw, pitch) in enumerate(gaze):
+            pivot.rotation_euler = (float(pitch), 0.0, float(yaw))   # Blender: X pitch, Z yaw
+            pivot.keyframe_insert("rotation_euler", frame=f + 1)
     head.select_set(True)
     context.view_layer.objects.active = head
     return head
@@ -192,7 +211,9 @@ class MIMETIC_OT_generate(bpy.types.Operator):
             scn = context.scene
             if not scn.sequence_editor:
                 scn.sequence_editor_create()
-            scn.sequence_editor.sequences.new_sound("Mimetic voice", wav, channel=1, frame_start=1)
+            ed = scn.sequence_editor
+            strips = ed.strips if hasattr(ed, "strips") else ed.sequences     # Blender 5 renamed the collection
+            strips.new_sound("Mimetic voice", wav, channel=1, frame_start=1)
         context.scene.frame_start, context.scene.frame_end = 1, n
         return {"FINISHED"}
 

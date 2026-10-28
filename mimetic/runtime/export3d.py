@@ -73,6 +73,12 @@ def write_props(outdir):
     sv, sf = uv_sphere(1.0, 24, 12)
     write_obj(outdir / "tongue.obj", to_blender(sv * np.array([1.5, 0.45, 1.7]) + np.array([0.0, -4.85, 3.1])), sf, "tongue")
     write_obj(outdir / "mouth_cavity.obj", to_blender(sv * np.array([2.3, 1.7, 2.0]) + np.array([0.0, -4.6, 2.9])), sf[:, ::-1], "mouth_cavity")
-    ev, ef = uv_sphere(1.0, 32, 16)
-    for (c, r), name in zip(sim.eyes, ("eye_R", "eye_L")):
-        write_obj(outdir / f"{name}.obj", to_blender(ev * r + c), ef, name)
+    ev, ef = uv_sphere(1.0, 96, 64)
+    for (c, r), side in zip(sim.eyes, ("R", "L")):
+        write_obj(outdir / f"eye_{side}.obj", to_blender(ev * r + c), ef, f"eye_{side}")
+        # iris + pupil: a cap of the eyeball facing forward (+z), slightly proud of the sclera
+        keep = ev[:, 2] > np.cos(np.radians(32))
+        remap = -np.ones(len(ev), int)
+        remap[keep] = np.arange(keep.sum())
+        cf = np.array([[remap[a], remap[b], remap[c_]] for a, b, c_ in ef if keep[a] and keep[b] and keep[c_]])
+        write_obj(outdir / f"iris_{side}.obj", to_blender(ev[keep] * (r + 0.01) + c), cf, f"iris_{side}")
