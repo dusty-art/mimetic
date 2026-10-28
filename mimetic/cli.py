@@ -84,7 +84,8 @@ def cmd_live(a):
         A_ = acts[None]
         if a.vmc:
             bs = eng.to_arkit(A_, gaze[None])[0]
-            vmc.send(bs, head)
+            tg = getattr(drv, "last_tongue", None)
+            vmc.send(bs, head, float(outputs.tongue_out(np.array(tg[-1:]))[0]) if tg else None)
         if vts is not None:
             p = outputs.vts_params(eng, A_, head[None], gaze[None])
             loop.run_until_complete(vts.send({k: v[0] for k, v in p.items()}))
