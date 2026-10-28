@@ -1,0 +1,10 @@
+.venv/
+.cache/
+__pycache__/
+*.egg-info/
+data/
+checkpoints/
+experiments/*.log
+*.wav
+*.mp4
+.DS_Store

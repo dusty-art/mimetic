@@ -1,0 +1,26 @@
+[project]
+name = "mimetic"
+version = "0.1.0"
+description = "Muscle-driven talking faces: speech + emotion -> facial muscle activations -> animated avatars"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "numpy",
+    "scipy",
+    "torch",
+    "mediapipe",
+    "opencv-python-headless",
+    "soundfile",
+    "pillow",
+    "moderngl",
+    "tqdm",
+]
+
+[project.scripts]
+mimetic = "mimetic.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["mimetic*"]
