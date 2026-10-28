@@ -114,6 +114,7 @@ def main():
         bars=img(F / "eval_bars.png", 1100),
         blender=img(EXPERIMENTS / "blender" / "frames.png", 768),
         web=img(EXPERIMENTS / "web_demo.png", 900),
+        tongue=img(F / "tongue.png", 1100),
         v_emotions=video(EXPERIMENTS / "demos" / "emotions.mp4"), v_muscles=video(EXPERIMENTS / "demos" / "muscles.mp4"),
         v_bilabials=video(EXPERIMENTS / "demos" / "bilabials.mp4"),
         eval_rows="\n".join(rows) or "<tr><td colspan=7>Evaluation pending</td></tr>",
@@ -202,6 +203,13 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
     <thead><tr><th>System</th><th>Emotion</th><th>Rounding (mm)</th><th>vs neutral</th><th>p/b/m closed</th><th>Corner lift (mm)</th><th>Cheek raise (mm)</th></tr></thead>
     <tbody>{comp_rows}</tbody></table></div>
   <p class="col" style="color:var(--muted);font-size:.92rem">Eight new sentences synthesized by TTS (not in the training data). Rounding = mouth width at unrounded vowels minus width at rounded sounds; corner lift and cheek raise show how much of the emotion remains visible.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Inside the mouth</div>
+  <h2>Teeth ride the jaw; the tongue follows phonetics</h2>
+  <p class="col">No talking-face dataset records the tongue, because trackers cannot see it. So the tongue follows phonetic targets: tip to the ridge for t/d/n/l/s, between the teeth for th, back raised for k/g, low for open vowels. Critical consonants dominate and transitions anticipate, as in coarticulation. In live mode the audio model's phoneme predictions drive it, and it exports as ARKit <code>tongueOut</code> and a Blender point cache.</p>
+  <figure><img alt="Close-ups of the mouth showing tongue positions for th, t, l, k and ah" src="{tongue}"></figure>
 </section>
 
 <section>
