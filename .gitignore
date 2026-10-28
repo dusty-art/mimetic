@@ -2,8 +2,8 @@
 .cache/
 __pycache__/
 *.egg-info/
-data/
-checkpoints/
+/data/
+/checkpoints/
 experiments/*.log
 *.wav
 *.mp4
