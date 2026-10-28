@@ -39,7 +39,7 @@ def _prefs(context):
 
 class MimeticSettings(bpy.types.PropertyGroup):
     project: StringProperty(name="Mimetic project", subtype="DIR_PATH",
-                            default=os.path.expanduser("~/Desktop/test"))
+                            default="")
     source: EnumProperty(name="Source", items=[("TEXT", "Text", ""), ("AUDIO", "Audio file", "")])
     text: StringProperty(name="Text", default="[happy:0.7] Hello! I'm moving forty-seven muscles to say this.")
     audio: StringProperty(name="Audio", subtype="FILE_PATH")
@@ -53,7 +53,9 @@ class MimeticSettings(bpy.types.PropertyGroup):
 
 def run_export(s, fps, outdir):
     py = os.path.join(bpy.path.abspath(s.project), ".venv", "bin", "python")
-    cmd = [py, "-m", "mimetic.cli", "export", "-o", outdir, "--fps", str(fps), "--gain", str(s.gain)]
+    if not s.project or not os.path.exists(py):
+        raise RuntimeError("Set 'Mimetic project' to the cloned mimetic folder (the one with .venv/)")
+    cmd =[py, "-m", "mimetic.cli", "export", "-o", outdir, "--fps", str(fps), "--gain", str(s.gain)]
     if s.source == "TEXT":
         cmd += ["--text", s.text, "--voice", s.voice]
     else:

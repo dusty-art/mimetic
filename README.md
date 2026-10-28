@@ -16,8 +16,16 @@ VMC protocol), Live2D / VTube Studio, and Blender.
 ## Quick start
 
 ```bash
-cd ~/Desktop/test && source .venv/bin/activate
+git clone https://github.com/dusty-art/mimetic && cd mimetic
 ```
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+```
+
+You also need `espeak-ng` and `ffmpeg` (`brew install espeak-ng ffmpeg` on macOS).
+Trained checkpoints and datasets are not in this repository: `checkpoints/` and
+`data/` are git-ignored. Build them with the steps under [Reproducing](#reproducing).
 
 Speak a line and render a video (emotion tags apply from that point on):
 
