@@ -67,6 +67,21 @@ def main():
             comp_rows.append(f"<tr{' class=ours' if s == 'mimetic' else ''}><th scope=row>{labels.get(s, s)}</th><td>{e}</td>"
                              f"<td>{fmt(v['rounding_mm'])}</td><td>{fmt(v.get('rounding_vs_neutral'))}</td>"
                              f"<td>{fmt(100 * v['closure'], 0)}%</td><td>{fmt(v['corner_lift_mm'])}</td><td>{fmt(v['cheek_raise_mm'])}</td></tr>")
+    cues = load("emotion_cues.json") or {}
+    cue_rows = []
+    if cues:
+        cols = [k for k in ("real", "muscle_fit", "mimetic", "direct") if k in cues]
+        for e in ("happy", "sad", "angry", "fearful", "disgusted", "surprised"):
+            if e not in cues.get("real", {}):
+                continue
+            for c, v in cues["real"][e].items():
+                cells = "".join(f"<td>{cues[k][e][c]:+.2f}</td>" for k in cols)
+                cue_rows.append(f"<tr><th scope=row>{e}</th><td style='text-align:left'>{c.replace('_', ' ')}</td>{cells}</tr>")
+        share = "".join(f"<td>{100 * cues[k].get('_signature_share', 1.0):.0f}%</td>" for k in cols)
+        cue_rows.append(f"<tr class=ours><th scope=row>share of real signature</th><td></td>{share}</tr>")
+        cue_head = "".join(f"<th>{ {'real': 'Real', 'muscle_fit': 'Muscle fit', 'mimetic': 'Mimetic', 'direct': 'Direct regr.'}[k]}</th>" for k in cols)
+    else:
+        cue_head = ""
     mim = ev.get("mimetic", {})
     best_base = min((ev[k]["LVE_mm"] for k in ("direct", "viseme_table") if k in ev), default=None)
     apg = rl.get("apg", {}).get("final_mean_abs_err_mm")
@@ -94,6 +109,7 @@ def main():
         web=img(EXPERIMENTS / "web_demo.png", 900),
         eval_rows="\n".join(rows) or "<tr><td colspan=7>Evaluation pending</td></tr>",
         comp_rows="\n".join(comp_rows) or "<tr><td colspan=7>Composition test pending</td></tr>",
+        cue_rows="\n".join(cue_rows) or "<tr><td colspan=6>pending</td></tr>", cue_head=cue_head,
         fit_lips=fmt(fit.get("mean_lips_mm")), apg=fmt(apg), ppo=fmt(ppo), ppo20=fmt(ppo20),
         zero=fmt(rl_long.get("zero_policy_err_mm") or rl.get("zero_policy_err_mm")),
         n_test=ev.get("_meta", {}).get("test_clips", "—"), n_bil=ev.get("_meta", {}).get("bilabial_occurrences", "—"),
@@ -184,6 +200,10 @@ ul {{ margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }}
     <thead><tr><th>System</th><th>Lip error (mm) ↓</th><th>Aperture corr ↑</th><th>p/b/m closed ↑</th><th>Emotion read ↑</th><th>Jerk vs real</th><th>Lips interpenetrate ↓</th></tr></thead>
     <tbody>{eval_rows}</tbody></table></div>
   <figure><img alt="Bar charts comparing systems on lip error, closure, aperture correlation and emotion recognition" src="{bars}"></figure>
+  <h3>How much of each emotion shows on the face</h3>
+  <div class="table"><table>
+    <thead><tr><th>Emotion</th><th style="text-align:left">Cue (mm vs neutral)</th>{cue_head}</tr></thead>
+    <tbody>{cue_rows}</tbody></table></div>
   <p class="col" style="color:var(--muted);font-size:.92rem">Lip error is the per-frame maximum over lip vertices (the MeshTalk/FaceFormer LVE), averaged over frames. The emotion judge is a classifier on expression geometry trained on real faces and their muscle fits. Real tracked faces close on fewer bilabials than the threshold expects because the tracker smooths fast lip contacts.</p>
 </section>
 

@@ -1,0 +1,76 @@
+{
+ "mimetic": {
+  "neutral": {
+   "rounding_mm": 2.9187533855438232,
+   "closure": 1.0,
+   "corner_lift_mm": -1.2902719974517822,
+   "cheek_raise_mm": 0.2328648865222931,
+   "rounding_vs_neutral": 1.0
+  },
+  "happy": {
+   "rounding_mm": 5.200839996337891,
+   "closure": 1.0,
+   "corner_lift_mm": 0.7279941439628601,
+   "cheek_raise_mm": 0.663695216178894,
+   "rounding_vs_neutral": 1.7818703087752883
+  },
+  "angry": {
+   "rounding_mm": 3.77703857421875,
+   "closure": 0.9615384615384616,
+   "corner_lift_mm": -1.2969287633895874,
+   "cheek_raise_mm": 0.3702886700630188,
+   "rounding_vs_neutral": 1.2940588241973074
+  },
+  "sad": {
+   "rounding_mm": 3.168224334716797,
+   "closure": 1.0,
+   "corner_lift_mm": -0.9405288696289062,
+   "cheek_raise_mm": 0.38576093316078186,
+   "rounding_vs_neutral": 1.0854717463998733
+  },
+  "surprised": {
+   "rounding_mm": 3.3638153076171875,
+   "closure": 0.9615384615384616,
+   "corner_lift_mm": -1.1482903957366943,
+   "cheek_raise_mm": 0.255298912525177,
+   "rounding_vs_neutral": 1.1524835651678191
+  }
+ },
+ "viseme_table": {
+  "neutral": {
+   "rounding_mm": 1.3263092041015625,
+   "closure": 0.0,
+   "corner_lift_mm": -0.7809929251670837,
+   "cheek_raise_mm": 0.2537558376789093,
+   "rounding_vs_neutral": 1.0
+  },
+  "happy": {
+   "rounding_mm": 1.3263511657714844,
+   "closure": 0.0,
+   "corner_lift_mm": 3.2428581714630127,
+   "cheek_raise_mm": 1.8476080894470215,
+   "rounding_vs_neutral": 1.0000316379240919
+  },
+  "angry": {
+   "rounding_mm": 1.3263307809829712,
+   "closure": 0.0,
+   "corner_lift_mm": -0.7435495853424072,
+   "cheek_raise_mm": 0.9010426998138428,
+   "rounding_vs_neutral": 1.0000162683643767
+  },
+  "sad": {
+   "rounding_mm": 1.326263427734375,
+   "closure": 0.0,
+   "corner_lift_mm": -0.6165428161621094,
+   "cheek_raise_mm": 0.5723720788955688,
+   "rounding_vs_neutral": 0.9999654859009905
+  },
+  "surprised": {
+   "rounding_mm": 1.3262748718261719,
+   "closure": 0.0,
+   "corner_lift_mm": -1.3988230228424072,
+   "cheek_raise_mm": 0.5760259628295898,
+   "rounding_vs_neutral": 0.9999741144257429
+  }
+ }
+}

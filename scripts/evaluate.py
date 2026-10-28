@@ -146,7 +146,8 @@ def main():
     ap.add_argument("--clf-steps", type=int, default=3000)
     ap.add_argument("--out", default="eval_results.json")
     args = ap.parse_args()
-    dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    import os
+    dev = os.environ.get("MIMETIC_DEVICE") or ("mps" if torch.backends.mps.is_available() else "cpu")
     torch.manual_seed(0)
     train, test = Data("train"), Data("test")
     face = load_face_model(dev)

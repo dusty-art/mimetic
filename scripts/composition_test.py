@@ -40,7 +40,8 @@ BIL = {"P", "B", "M"}
 
 
 def main():
-    dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    import os
+    dev = os.environ.get("MIMETIC_DEVICE") or ("mps" if torch.backends.mps.is_available() else "cpu")
     face = load_face_model(dev)
     rest = face.rest
     pca = np.load(MO.MOTION / "pca.npz")

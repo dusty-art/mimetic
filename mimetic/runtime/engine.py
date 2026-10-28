@@ -168,6 +168,30 @@ class Engine:
         anim = Animation(CTRL_FPS, acts, head, gaze, utt.audio, 24000, utt.segments, utt.emotion_spans, self)
         return upsample(anim, fps) if fps != CTRL_FPS else anim
 
+    def stream_text(self, text_chunks, voice=None, fps=60.0, emotion_gain=1.0, seed=0):
+        """Animate text as it arrives (LLM tokens, speech-to-text captions): one Animation per sentence.
+
+        `text_chunks` is any iterable of strings. Complete sentences are voiced and animated as soon as
+        their final punctuation arrives, carrying the current emotion tag across sentences.
+        """
+        import re
+        from mimetic.runtime.tts import parse_tags
+        buf, emotion, k = "", ("neutral", 0.0), 0
+        for chunk in list(text_chunks) + [None]:
+            if chunk is not None:
+                buf += chunk
+            parts = re.split(r"(?<=[.!?])\s+", buf) if chunk is not None else [buf]
+            ready, buf = (parts[:-1], parts[-1]) if chunk is not None else (parts, "")
+            for sent in ready:
+                if not sent.strip():
+                    continue
+                tagged = parse_tags(sent, emotion)
+                if tagged:
+                    emotion = tagged[-1][1:]
+                yield self.animate_text(sent, voice=voice, fps=fps, seed=seed + k, default_emotion=emotion,
+                                        emotion_gain=emotion_gain)
+                k += 1
+
     def animate_audio(self, audio, sr, text=None, emotion=("neutral", 0.0), fps=60.0, seed=0, aligner=None):
         """Offline audio file: align the transcript if given, otherwise use the audio model."""
         a16 = resample_audio(audio, sr)
