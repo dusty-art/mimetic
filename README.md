@@ -20,12 +20,21 @@ git clone https://github.com/dusty-art/mimetic && cd mimetic
 ```
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+uv venv --python 3.12 && source .venv/bin/activate && uv pip install -e ".[dev]"
 ```
 
-You also need `espeak-ng` and `ffmpeg` (`brew install espeak-ng ffmpeg` on macOS).
-Trained checkpoints and datasets are not in this repository: `checkpoints/` and
-`data/` are git-ignored. Build them with the steps under [Reproducing](#reproducing).
+Download the trained models (108 MB, from the
+[v0.1.0 release](https://github.com/dusty-art/mimetic/releases/tag/v0.1.0)):
+
+```bash
+curl -L https://github.com/dusty-art/mimetic/releases/download/v0.1.0/mimetic-models-v0.1.0.tar.gz | tar xz
+```
+
+You also need `uv`, `espeak-ng` and `ffmpeg` (`brew install uv espeak-ng ffmpeg` on
+macOS). The first run downloads the Kokoro voice from Hugging Face. The model
+weights are CC BY-NC-SA 4.0, for non-commercial use (see
+`checkpoints/LICENSE.md`). The datasets are not redistributed; to retrain, follow
+[Reproducing](#reproducing).
 
 Speak a line and render a video (emotion tags apply from that point on):
 
@@ -186,6 +195,7 @@ python scripts/composition_test.py && python scripts/emotion_cues.py && python s
 | MediaPipe Face Landmarker | Apache 2.0 | face tracking, canonical mesh |
 | Project Gutenberg texts | public domain | synthetic speech corpus |
 
-Because RAVDESS is non-commercial, the released model is for research use.
+Because RAVDESS is non-commercial and share-alike, the released model weights are
+CC BY-NC-SA 4.0: research and other non-commercial use.
 Every clip records its source, so a commercially clean model can be retrained
 on GRID + CREMA-D only.
