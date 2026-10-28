@@ -37,6 +37,7 @@ def video_to_animation(engine, path, device="cpu") -> Animation:
     rest = np.load(ASSETS / "rest_neutral.npy")
     closed, neutral = MO.lip_contact_params([loc], N)
     D = MO.apply_lip_contact(D, N, closed, neutral, MO.pair_apertures(rest[None])[0])
+    D = MO.apply_lid_transfer(D, N, rest)
     pca = np.load(MO.MOTION / "pca.npz")
     coef = (D.reshape(len(D), -1) - pca["mean"]) @ pca["comps"].T
     ck = torch.load(CHECKPOINTS / "encoder.pt", map_location="cpu", weights_only=False)

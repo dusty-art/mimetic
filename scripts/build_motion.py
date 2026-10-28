@@ -33,6 +33,7 @@ def pass_a_speaker(sdir):
     samples = []
     for D in disps:
         D = MO.apply_lip_contact(D, N, closed, neutral, rest_gap)
+        D = MO.apply_lid_transfer(D, N, rest)
         k = max(1, len(D) // 20)
         samples.append(D[rng.choice(len(D), size=min(k, len(D)), replace=False)])
     S = np.concatenate(samples)
@@ -44,7 +45,8 @@ def pass_a_speaker(sdir):
 
 def pass_b_speaker(args):
     sdir, N, mean, comps, closed, neutral = args
-    rest_gap = MO.pair_apertures(np.load(ASSETS / "rest_neutral.npy")[None])[0]
+    rest = np.load(ASSETS / "rest_neutral.npy")
+    rest_gap = MO.pair_apertures(rest[None])[0]
     sdir = Path(sdir)
     clips = MO.load_speaker(sdir)
     rec = {k: [] for k in ("coef", "rot", "trans", "scale", "iris", "bs")}
@@ -54,6 +56,7 @@ def pass_b_speaker(args):
     for d in clips:
         D, (s, R, t), iris = MO.clip_displacements(d, N)
         D = MO.apply_lip_contact(D, N, closed, neutral, rest_gap)
+        D = MO.apply_lid_transfer(D, N, rest)
         flat = D.reshape(len(D), -1)
         c = (flat - mean) @ comps.T
         recon = c @ comps + mean

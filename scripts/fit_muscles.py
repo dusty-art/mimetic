@@ -72,6 +72,7 @@ def main():
     ap.add_argument("--calibrate", action="store_true")
     ap.add_argument("--l1", type=float, default=0.0015)
     ap.add_argument("--aperture", type=float, default=30.0)
+    ap.add_argument("--eye-aperture", type=float, default=30.0)
     ap.add_argument("--smooth", type=float, default=0.05)
     ap.add_argument("--bs", type=int, default=48)
     args = ap.parse_args()
@@ -97,6 +98,9 @@ def main():
         p.requires_grad_(False)
     rest = sur.rest
     W = fit_weights(sim.X.numpy()).to(dev)
+    # Upper-face muscles make small movements that matter for emotion: a lighter effort prior there.
+    upper = ("frontalis", "corrugator", "depressor_supercilii", "procerus", "orbicularis_oculi", "levator_palpebrae")
+    l1w = torch.tensor([0.3 if n.startswith(upper) else 1.0 for n in A.MUSCLE_NAMES], device=dev)
     enc = TemporalEncoder(k_in=comps.shape[0]).to(dev)
     cal = Calibration(sim.X.numpy(), sim.W.numpy(), sim.w_jaw.numpy(), sim.face).to(dev) if args.calibrate else None
     params = list(enc.parameters()) + (list(cal.parameters()) if cal is not None else [])
@@ -123,14 +127,16 @@ def main():
         y = rest + disp.view(*cb.shape[:2], -1, 3)
         err = ((x - y) ** 2 * W).sum(-1).mean(-1)                         # (B,T)
         rec = (err * mb).sum() / mb.sum()
-        l1 = (a.sum(-1) * mb).sum() / mb.sum()
+        l1 = ((a * l1w).sum(-1) * mb).sum() / mb.sum()
         da = a[:, 1:] - a[:, :-1]
         sm = ((da ** 2).sum(-1) * mb[:, 1:] * mb[:, :-1]).sum() / mb.sum()
         # Lip contact matters more than its share of vertices: match each inner-lip gap explicitly,
         # and never let the lips pass through each other.
         ap_x, ap_y = MO.pair_apertures_t(x), MO.pair_apertures_t(y)
         l_ap = ((((ap_x - ap_y) ** 2).mean(-1) + 4 * torch.relu(-ap_x).pow(2).mean(-1)) * mb).sum() / mb.sum()
-        loss = rec + args.l1 * l1 + args.smooth * sm + args.aperture * l_ap
+        # Eye openness is a 1-2 mm cue that carries surprise, fear and the Duchenne squint.
+        l_eye = (((MO.lid_apertures_t(x) - MO.lid_apertures_t(y)) ** 2).mean(-1) * mb).sum() / mb.sum()
+        loss = rec + args.l1 * l1 + args.smooth * sm + args.aperture * l_ap + args.eye_aperture * l_eye
         if cal is not None:
             loss = loss + 0.5 * cal.penalty()
         with torch.no_grad():

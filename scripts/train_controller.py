@@ -130,7 +130,10 @@ def main():
     lips = C.UPPER_INNER + C.LOWER_INNER + C.UPPER_OUTER + C.LOWER_OUTER
     vw = torch.ones(rest.shape[0], device=dev)
     vw[lips] = 4.0
-    vw[C.R_UPPER_LID + C.R_LOWER_LID + C.L_UPPER_LID + C.L_LOWER_LID] = 1.5
+    rx, ry = rest[:, 0].abs(), rest[:, 1]
+    vw[(rx > 2.3) & (rx < 6.0) & (ry > -2.5) & (ry < 1.5)] = 2.0          # cheeks
+    vw[(ry > 3.4) & (ry < 6.5)] = 2.0                                       # brows
+    vw[C.R_UPPER_LID + C.R_LOWER_LID + C.L_UPPER_LID + C.L_LOWER_LID] = 3.0
     pal = [A.MUSCLE_NAMES.index(n) for n in ("orbicularis_oculi_palpebral_R", "orbicularis_oculi_palpebral_L")]
     jaw_i = A.MUSCLE_NAMES.index("jaw_open")
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)

@@ -27,8 +27,11 @@ def fit_weights(X: np.ndarray) -> torch.Tensor:
     lips = C.UPPER_INNER + C.LOWER_INNER + C.UPPER_OUTER + C.LOWER_OUTER
     lids = C.R_UPPER_LID + C.R_LOWER_LID + C.L_UPPER_LID + C.L_LOWER_LID
     w[C.RIGID_ANCHORS] = 0.2
-    w[C.R_BROW + C.L_BROW] = 2.0
-    w[lids] = 3.0
+    x, y = X[:, 0], X[:, 1]
+    w[(np.abs(x) > 2.3) & (np.abs(x) < 6.0) & (y > -2.5) & (y < 1.5)] = 2.5     # cheeks (smile raises them)
+    w[(y > 3.4) & (y < 6.5)] = np.maximum(w[(y > 3.4) & (y < 6.5)], 2.0)       # brow band
+    w[C.R_BROW + C.L_BROW] = 4.0
+    w[lids] = 6.0
     w[lips] = 5.0
     W = np.stack([w, w, 0.35 * w], -1)      # monocular depth is the least reliable axis
     return torch.tensor(W / W.mean(), dtype=torch.float32)

@@ -122,15 +122,21 @@ percentile. It is differentiable and runs in microseconds per pose.
   sealed in 0.1% of frames instead of 9%. *Contact-preserving transfer* maps
   each speaker's sealed gap to contact and their neutral gap to the rest
   face's neutral gap, per inner-lip pair, spread smoothly over the lip.
+* **Eye openness needs ratio transfer.** Offsets close small eyes too far and
+  large eyes too little. Eyelid gaps now transfer as a fraction of each
+  speaker's neutral opening, with the upper lid carrying 75% of the change.
 
 ## 4. Muscle motion capture
 
 A temporal convolutional encoder maps each frame's displacement to 52
-activations. The frozen surrogate decodes them, and a loss on vertices (lips
-×5, lids ×3, brows ×2, depth ×0.35) plus per-pair lip-aperture matching
-trains the encoder. An L1 effort prior and temporal smoothness choose the
+activations. The frozen surrogate decodes them, and a loss on vertices (lids
+×6, lips ×5, brows ×4, cheeks ×2.5, depth ×0.35) plus per-pair lip- and
+eyelid-aperture matching trains the encoder. An L1 effort prior and temporal smoothness choose the
 economical solution among the many that fit, following minimum-effort motor
-control. A calibration layer learns a small corrective field per muscle,
+control. The prior is lighter (×0.3) on upper-face muscles: a first version
+with a uniform prior lost most of surprise's eye-widening (0.05 vs 1.6 mm)
+and two-thirds of the happy cheek raise, because 1–2 mm cues were cheaper to
+ignore than to fit. A calibration layer learns a small corrective field per muscle,
 masked to that muscle's anatomical territory: anatomy is the prior, real
 faces refine it.
 
