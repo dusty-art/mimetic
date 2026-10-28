@@ -83,7 +83,8 @@ class SpeechEmotionController(nn.Module):
         nn.init.zeros_(self.speech_out[1].weight); nn.init.zeros_(self.speech_out[1].bias)
 
     def forward(self, phone, ppos, pdur, prosody, emotion, intensity, speaker, pad_mask=None,
-                speech_gain: float = 1.0, return_parts: bool = False, emo_prosody_keep=None, emo_ctx_keep=None):
+                speech_gain: float = 1.0, return_parts: bool = False, emo_prosody_keep=None, emo_ctx_keep=None,
+                emotion_gain: float = 1.0):
         """phone/ppos/pdur/prosody: (B,T[,4]); emotion (B,) or (B,T) ids; intensity (B,) or (B,T); speaker (B,)."""
         B, T = phone.shape
         dev = phone.device
@@ -107,7 +108,7 @@ class SpeechEmotionController(nn.Module):
         g = self.emo_inp(e) + sinusoid(T, self.emo_inp.out_features, dev)[None]
         for blk in self.emo_blocks:
             g = blk(g, pad_mask)
-        emo = self.emo_out(g) * inten.clamp(0, 1.5)
+        emo = self.emo_out(g) * inten.clamp(0, 1.5) * emotion_gain
         logits = self.tone + speech + emo
         acts = torch.sigmoid(logits) if self.output == "sigmoid" else logits
         head = self.head_out(torch.cat([h, g], -1)) * 0.3

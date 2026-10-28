@@ -82,6 +82,7 @@ class SayReq(BaseModel):
     voice: str = "af_heart"
     style: str | None = None
     gain: float = 1.0
+    expressiveness: float = 1.0
     fps: float = 60.0
     seed: int = 0
 
@@ -97,7 +98,7 @@ def wav_bytes(audio, sr):
 def say(req: SayReq):
     eng = engine()
     anim = eng.animate_text(req.text, voice=req.voice, style=req.style, fps=req.fps, speech_gain=req.gain,
-                            seed=req.seed)
+                            seed=req.seed, emotion_gain=req.expressiveness)
     STATE["last"] = anim
     v = anim.vertices
     return JSONResponse({

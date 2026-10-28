@@ -139,7 +139,7 @@ class Engine:
 
     # ------------------------------------------------------------------
     @torch.no_grad()
-    def drive(self, segments, emotion_spans, audio16k, n, style=None, speech_gain=1.0, seed=0):
+    def drive(self, segments, emotion_spans, audio16k, n, style=None, speech_gain=1.0, seed=0, emotion_gain=1.0):
         ids, pos, dur = phone_track(segments, n)
         pr = prosody.features(audio16k, fps=CTRL_FPS, n=n) if audio16k is not None and len(audio16k) else \
             np.zeros((n, 4), np.float32)
@@ -147,7 +147,8 @@ class Engine:
         spk = self.n_avg if style is None else (self.speakers.index(style) if isinstance(style, str) else style)
         t = lambda x, dt=torch.float32: torch.as_tensor(x, dtype=dt, device=self.device)[None]
         acts, head = self.ctrl(t(ids, torch.long), t(pos), t(dur), t(pr), t(emo, torch.long), t(inten),
-                               torch.tensor([spk], device=self.device), speech_gain=speech_gain)
+                               torch.tensor([spk], device=self.device), speech_gain=speech_gain,
+                               emotion_gain=emotion_gain)
         acts, head = acts[0].cpu().numpy(), head[0].cpu().numpy()
         rng = np.random.default_rng(seed)
         main_emo = EMOTIONS[int(np.bincount(emo).argmax())] if n else "neutral"
@@ -159,11 +160,11 @@ class Engine:
         return acts, head, gaze
 
     def animate_text(self, text, voice=None, style=None, fps=60.0, speech_gain=1.0, seed=0,
-                     default_emotion=("neutral", 0.0)) -> Animation:
+                     default_emotion=("neutral", 0.0), emotion_gain=1.0) -> Animation:
         utt = self.tts.synthesize(text, voice=voice, default_emotion=default_emotion)
         n = int(np.ceil(utt.duration * CTRL_FPS)) + 3
         a16 = resample_audio(utt.audio, 24000)
-        acts, head, gaze = self.drive(utt.segments, utt.emotion_spans, a16, n, style, speech_gain, seed)
+        acts, head, gaze = self.drive(utt.segments, utt.emotion_spans, a16, n, style, speech_gain, seed, emotion_gain)
         anim = Animation(CTRL_FPS, acts, head, gaze, utt.audio, 24000, utt.segments, utt.emotion_spans, self)
         return upsample(anim, fps) if fps != CTRL_FPS else anim
 

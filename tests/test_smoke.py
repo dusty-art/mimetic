@@ -103,3 +103,23 @@ def test_exports(tmp_path):
     assert raw[:12] == b"POINTCACHE2\0" and len(raw) == 32 + frames.nbytes
     M = export3d.jaw_tracks(np.zeros((4, A.N_ACT), np.float32))
     assert np.allclose(M[0], np.eye(4), atol=1e-6)
+
+
+def test_lip_and_lid_transfer_preserve_contact_and_ratio():
+    from mimetic.data import motion as MO
+    rest = np.load("assets/rest_neutral.npy")
+    N = rest.copy()
+    N[MO.LIP_U, 1] += 0.2                       # this speaker's relaxed lips sit 2 mm wider apart
+    closed = MO.pair_apertures(rest[None])[0] * 0 + 0.0
+    neutral = MO.pair_apertures(N[None])[0]
+    seal = np.zeros((1, 468, 3))
+    seal[0, MO.LIP_U, 1] = -neutral              # the speaker seals their lips
+    out = MO.apply_lip_contact(seal, N, closed, neutral, MO.pair_apertures(rest[None])[0])
+    ap = MO.pair_apertures(rest[None] + out)[0]
+    assert np.abs(ap).max() < 0.02               # sealed on the rest face too, not interpenetrating
+    half = np.zeros((1, 468, 3))
+    g = MO.lid_apertures(N[None])[0]
+    half[0, MO.LID_U, 1] = -0.5 * g              # eyes half closed
+    out = MO.apply_lid_transfer(half, N, rest)
+    ratio = MO.lid_apertures(rest[None] + out)[0] / MO.lid_apertures(rest[None])[0]
+    assert np.allclose(ratio, 0.5, atol=0.05)

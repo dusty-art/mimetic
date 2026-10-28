@@ -19,7 +19,8 @@ def cmd_say(a):
     from mimetic.runtime.video import render_video
     eng = Engine.load()
     t0 = time.time()
-    anim = eng.animate_text(a.text, voice=a.voice, fps=a.fps, speech_gain=a.gain, seed=a.seed)
+    anim = eng.animate_text(a.text, voice=a.voice, fps=a.fps, speech_gain=a.gain, seed=a.seed,
+                            emotion_gain=a.expressiveness)
     print(f"animated {anim.n / anim.fps:.2f}s in {time.time() - t0:.2f}s")
     render_video(anim, a.output, size=(a.size, a.size), show_muscles=a.muscles, yaw=a.yaw)
     print("wrote", a.output)
@@ -32,7 +33,8 @@ def cmd_export(a):
     from mimetic.runtime.engine import Engine
     eng = Engine.load()
     if a.text:
-        anim = eng.animate_text(a.text, voice=a.voice, fps=a.fps, speech_gain=a.gain, seed=a.seed)
+        anim = eng.animate_text(a.text, voice=a.voice, fps=a.fps, speech_gain=a.gain, seed=a.seed,
+                                emotion_gain=a.expressiveness)
     else:
         audio, sr = sf.read(a.audio, dtype="float32", always_2d=True)
         anim = eng.animate_audio(audio.mean(1), sr, text=a.transcript, emotion=(a.emotion, a.intensity), fps=a.fps)
@@ -137,12 +139,14 @@ def main(argv=None):
     s.add_argument("--size", type=int, default=512); s.add_argument("--muscles", action="store_true")
     s.add_argument("--gain", type=float, default=1.0); s.add_argument("--seed", type=int, default=0)
     s.add_argument("--yaw", type=float, default=0.0)
+    s.add_argument("--expressiveness", type=float, default=1.0, help="emotion gain (1 = natural, 1.5-2 = cartoony)")
     s.set_defaults(fn=cmd_say)
     e = sub.add_parser("export"); e.add_argument("--text"); e.add_argument("--audio"); e.add_argument("--transcript")
     e.add_argument("-o", "--output", default="mimetic_export"); e.add_argument("--voice", default="af_heart")
     e.add_argument("--fps", type=float, default=30); e.add_argument("--gain", type=float, default=1.0)
     e.add_argument("--emotion", default="neutral"); e.add_argument("--intensity", type=float, default=0.0)
     e.add_argument("--seed", type=int, default=0)
+    e.add_argument("--expressiveness", type=float, default=1.0)
     e.set_defaults(fn=cmd_export)
     l = sub.add_parser("live"); l.add_argument("--vmc", nargs="?", const="127.0.0.1:39539")
     l.add_argument("--vts", action="store_true"); l.add_argument("--emotion", default="auto")

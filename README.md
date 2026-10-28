@@ -41,6 +41,18 @@ mimetic export --text "[surprised] Oh! You're here." -o out/
 mimetic export --audio speech.wav --transcript "what was said" -o out/
 ```
 
+Muscle motion capture from any face video (retargeted through muscle space):
+
+```bash
+mimetic mocap my_face.mp4 -o out/ --render
+```
+
+Exaggerate emotion for cartoony avatars without distorting lip-sync:
+
+```bash
+mimetic say "[surprised] No way!" --expressiveness 1.8 -o wow.mp4
+```
+
 Live microphone to a VTuber app:
 
 ```bash
@@ -52,6 +64,8 @@ mimetic live --vts
 ```
 
 ## VTubers and 3D avatars
+
+Step-by-step setup for each app: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 * **VSeeFace, Warudo, VNyan** (VMC protocol): enable the VMC receiver on port
   39539 and run `mimetic live --vmc`. Mimetic sends the 52 ARKit blendshapes,

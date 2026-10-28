@@ -22,7 +22,8 @@
   textarea { width:100%; min-height:96px; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; background:var(--bg); color:var(--ink); }
   select, input[type=range] { width:100%; }
   select { border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--bg); color:var(--ink); font:inherit; }
-  .row { display:flex; gap:8px; align-items:center; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .row > div { min-width: 110px; }
   .emos { display:flex; flex-wrap:wrap; gap:6px; }
   button { font:inherit; border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:8px; padding:6px 10px; cursor:pointer; }
   button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; padding:8px 14px; }
@@ -51,6 +52,7 @@
     <div class="row">
       <div style="flex:1"><label for="voice">Voice</label><select id="voice"></select></div>
       <div style="flex:1"><label for="gain">Articulation <span id="gainv">1.0</span></label><input id="gain" type="range" min="0.5" max="1.6" step="0.05" value="1"></div>
+      <div style="flex:1"><label for="expr">Expressiveness <span id="exprv">1.0</span></label><input id="expr" type="range" min="0.5" max="2.5" step="0.1" value="1"></div>
     </div>
     <div class="row"><button class="primary" id="say">Speak</button><button id="replay" disabled>Replay</button><button id="mic">Live mic</button></div>
     <div class="row" id="liveemo" style="display:none"><label style="margin:0;white-space:nowrap">Live emotion</label><select id="lemo"></select></div>
@@ -203,7 +205,7 @@ async function speak() {
   $("say").disabled = true; $("status").textContent = "Synthesising speech and solving muscles…";
   const t = performance.now();
   const r = await fetch("/api/say", {method:"POST", headers:{"content-type":"application/json"},
-    body: JSON.stringify({text:$("txt").value, voice:$("voice").value, gain:parseFloat($("gain").value)})});
+    body: JSON.stringify({text:$("txt").value, voice:$("voice").value, gain:parseFloat($("gain").value), expressiveness:parseFloat($("expr").value)})});
   const j = await r.json();
   clip = { fps:j.fps, n:j.n, acts:dec(j.acts, Float32Array), verts:f16(j.verts), gaze:dec(j.gaze, Float32Array), phonemes:j.phonemes, emotions:j.emotions, audio:j.audio };
   $("status").textContent = `${(j.n/j.fps).toFixed(1)} s of animation in ${((performance.now()-t)/1000).toFixed(1)} s.`;
@@ -236,6 +238,7 @@ async function toggleMic() {
 $("lemo").onchange = () => ws && ws.send(JSON.stringify({emotion:$("lemo").value, intensity:0.8}));
 $("say").onclick = speak; $("replay").onclick = play; $("mic").onclick = toggleMic;
 $("gain").oninput = () => $("gainv").textContent = parseFloat($("gain").value).toFixed(2);
+$("expr").oninput = () => $("exprv").textContent = parseFloat($("expr").value).toFixed(1);
 $("showm").onchange = e => muscleLines.visible = e.target.checked;
 $("wire").onchange = e => skin.material.wireframe = e.target.checked;
 $("xray").onchange = e => { skin.material.transparent = e.target.checked; skin.material.opacity = e.target.checked ? 0.45 : 1; skin.material.needsUpdate = true; };

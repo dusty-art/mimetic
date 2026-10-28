@@ -13,6 +13,8 @@ Metrics (canonical face space):
            fits) applied to the system's faces
   Jerk     mean squared third difference of lip motion relative to ground truth (1.0 = as smooth as real)
   Pen      frames with lips interpenetrating (aperture < -0.5 mm), %
+  AVms     audio-visual offset: mean shift (ms) that best aligns predicted and real lip aperture
+           (positive = the face lags the voice)
 """
 from __future__ import annotations
 
@@ -171,7 +173,7 @@ def main():
     clips = test.clips[: args.max_clips]
     names = ["ground_truth", "muscle_fit", "viseme_table"] + list(systems) + (["live_audio"] if audio_drv else [])
     acc = {n: {"lve": [], "mve": [], "apcorr": [], "close_hit": 0, "close_tot": 0, "emo_hit": 0, "emo_tot": 0,
-               "jerk": [], "pen": [], "frames": 0} for n in names}
+               "jerk": [], "pen": [], "frames": 0, "lag": []} for n in names}
     t_run = {n: 0.0 for n in names}
     bil = torch.tensor([P.PID[p] for p in ("P", "B", "M")], device=dev)
     with torch.no_grad():
@@ -224,6 +226,10 @@ def main():
                     pp, gg = ap_p[i, :n].cpu().numpy(), ap_g[i, :n].cpu().numpy()
                     if pp.std() > 1e-6 and gg.std() > 1e-6:
                         a_["apcorr"].append(np.corrcoef(pp, gg)[0, 1])
+                        if n > 30:   # audio-visual offset: the shift (frames at 30 fps) that best aligns the lips
+                            lags = range(-6, 7)
+                            cs = [np.corrcoef(pp[max(0, L):n + min(0, L)], gg[max(0, -L):n - max(0, L)])[0, 1] for L in lags]
+                            a_["lag"].append(lags[int(np.nanargmax(cs))])
                     # closure on bilabial runs
                     isb = torch.isin(b["phone"][i, :n], bil).cpu().numpy()
                     t = 0
@@ -255,18 +261,20 @@ def main():
                   "ApCorr": float(np.mean(a_["apcorr"])), "Closure": a_["close_hit"] / max(1, a_["close_tot"]),
                   "EmoAcc": a_["emo_hit"] / max(1, a_["emo_tot"]), "Jerk_rel": float(np.mean(a_["jerk"]) / gt_jerk),
                   "Pen_pct": 100 * float(np.mean(a_["pen"])),
+                  "AV_offset_ms": 1000 / 30 * float(np.mean(a_["lag"])) if a_["lag"] else None,
+                  "AV_abs_offset_ms": 1000 / 30 * float(np.mean(np.abs(a_["lag"]))) if a_["lag"] else None,
                   "RTF": (t_run[k] / (a_["frames"] / 30.0)) if t_run[k] else None}
     res["_meta"] = {"test_clips": len(clips), "closure_threshold_cm": close_thr, "rest_aperture_cm": rest_ap,
                     "bilabial_occurrences": acc["ground_truth"]["close_tot"]}
     EXPERIMENTS.mkdir(exist_ok=True)
     (EXPERIMENTS / args.out).write_text(json.dumps(res, indent=1))
-    hdr = f"{'system':14s} {'LVE mm':>7s} {'MVE mm':>7s} {'ApCorr':>7s} {'Closure':>8s} {'EmoAcc':>7s} {'Jerk':>6s} {'Pen%':>5s}"
+    hdr = f"{'system':14s} {'LVE mm':>7s} {'MVE mm':>7s} {'ApCorr':>7s} {'Closure':>8s} {'EmoAcc':>7s} {'Jerk':>6s} {'Pen%':>5s} {'AVms':>6s}"
     print(hdr)
     for k, r in res.items():
         if k.startswith("_"):
             continue
         print(f"{k:14s} {r['LVE_mm']:7.2f} {r['MVE_mm']:7.2f} {r['ApCorr']:7.3f} {r['Closure']:8.3f} {r['EmoAcc']:7.3f} "
-              f"{r['Jerk_rel']:6.2f} {r['Pen_pct']:5.2f}")
+              f"{r['Jerk_rel']:6.2f} {r['Pen_pct']:5.2f} {r['AV_offset_ms'] or 0:6.1f}")
     print(res["_meta"])
 
 
