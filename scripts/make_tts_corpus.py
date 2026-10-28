@@ -6,7 +6,6 @@ Output: data/tts/{id}.flac + data/tts/index.jsonl
 """
 from __future__ import annotations
 
-import io
 import json
 import random
 import re

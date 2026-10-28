@@ -1,6 +1,6 @@
 """Contact sheet: each right-side muscle (and jaw actuator) at full activation."""
 import sys
-import numpy as np, torch
+import torch
 from PIL import Image, ImageDraw
 from mimetic.face.sim import FaceSim
 from mimetic.face.render import FaceRenderer

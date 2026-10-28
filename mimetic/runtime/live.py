@@ -6,10 +6,6 @@ corresponds to `lookahead` hops in the past (default 80 ms).
 """
 from __future__ import annotations
 
-import threading
-import time
-from collections import deque
-
 import numpy as np
 import torch
 

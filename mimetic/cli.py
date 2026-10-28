@@ -5,11 +5,11 @@
   mimetic export --audio talk.wav [--transcript "..."] -o out/
   mimetic live --vmc 127.0.0.1:39539 | --vts     (microphone -> VSeeFace / Warudo / VNyan / VTube Studio)
   mimetic serve                                  (web demo on http://127.0.0.1:8765)
+  mimetic mocap video.mp4 -o out/ --render       (muscle motion capture from any face video)
 """
 from __future__ import annotations
 
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -55,7 +55,6 @@ def cmd_export(a):
 
 def cmd_live(a):
     import asyncio
-    import numpy as np
     from mimetic.runtime import outputs
     from mimetic.runtime.engine import Engine
     from mimetic.runtime.live import AudioDriver, LiveSession
@@ -96,6 +95,35 @@ def cmd_live(a):
         sess.stop()
 
 
+def cmd_mocap(a):
+    import soundfile as sf
+    import numpy as np
+    from mimetic.runtime import export3d, outputs
+    from mimetic.runtime.engine import Engine, upsample
+    from mimetic.runtime.mocap import video_to_animation
+    from mimetic.runtime.video import render_video
+    eng = Engine.load()
+    anim = video_to_animation(eng, a.video)
+    if a.fps and a.fps != anim.fps:
+        anim = upsample(anim, a.fps)
+    out = Path(a.output)
+    out.mkdir(parents=True, exist_ok=True)
+    outputs.write_json(out / "animation.json", anim)
+    outputs.write_livelink_csv(out / "livelink.csv", anim)
+    topo = export3d.SkinTopology()
+    frames = export3d.to_blender(topo.expand(anim.vertices))
+    export3d.write_obj(out / "head.obj", frames[0], topo.faces)
+    export3d.write_pc2(out / "head.pc2", frames, anim.fps)
+    np.save(out / "jaw.npy", export3d.jaw_tracks(anim.acts))
+    np.save(out / "gaze.npy", anim.gaze)
+    export3d.write_props(out)
+    if anim.audio is not None:
+        sf.write(out / "audio.wav", anim.audio, anim.sr)
+    if a.render:
+        render_video(anim, out / "muscle_mocap.mp4", show_muscles=a.muscles)
+    print(f"wrote {out}/ ({anim.n} frames at {anim.fps:g} fps)")
+
+
 def cmd_serve(a):
     from mimetic.web.server import main
     main()
@@ -121,6 +149,10 @@ def main(argv=None):
     l.add_argument("--intensity", type=float, default=0.8)
     l.set_defaults(fn=cmd_live)
     w = sub.add_parser("serve"); w.set_defaults(fn=cmd_serve)
+    m = sub.add_parser("mocap"); m.add_argument("video"); m.add_argument("-o", "--output", default="mimetic_mocap")
+    m.add_argument("--fps", type=float, default=0); m.add_argument("--render", action="store_true")
+    m.add_argument("--muscles", action="store_true")
+    m.set_defaults(fn=cmd_mocap)
     a = ap.parse_args(argv)
     if a.cmd == "export" and not (a.text or a.audio):
         ap.error("export needs --text or --audio")

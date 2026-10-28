@@ -37,6 +37,16 @@ def head_matrix(h):
     return M
 
 
+def _caption(img, text):
+    from PIL import Image, ImageDraw
+    im = Image.fromarray(img)
+    d = ImageDraw.Draw(im)
+    w = d.textlength(text)
+    d.rectangle([8, 8, 16 + w, 26], fill=(255, 255, 255))
+    d.text((12, 11), text, fill=(20, 20, 20))
+    return np.asarray(im)
+
+
 def render_video(anim, out, size=(512, 512), fps=None, show_muscles=False, yaw=0.0, label=None):
     fps = fps or anim.fps
     r = renderer(size)
@@ -59,7 +69,10 @@ def render_video(anim, out, size=(512, 512), fps=None, show_muscles=False, yaw=0
         for k in idx:
             J = jaws[k]
             img = r.render(verts[k], act=anim.acts[k], jaw=(J[:3, :3], J[:3, 3]), head=head_matrix(anim.head[k]),
-                           gaze=tuple(anim.gaze[k]), show_muscles=show_muscles)
+                           gaze=tuple(anim.gaze[k]), show_muscles=show_muscles,
+                           skin_alpha=0.7 if show_muscles else 1.0)
+            if label is not None:
+                img = _caption(img, label(k / anim.fps) if callable(label) else label)
             p.stdin.write(img.tobytes())
         p.stdin.close()
         p.wait()

@@ -17,7 +17,7 @@ The simulator calibrates each muscle's force so it reaches that excursion.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -191,7 +191,7 @@ def mouth_line_y(face: C.CanonicalFace, x: np.ndarray) -> np.ndarray:
 
 def region_mask(face: C.CanonicalFace, region: str) -> np.ndarray:
     V = face.verts
-    x, y, z = V[:, 0], V[:, 1], V[:, 2]
+    x, y = V[:, 0], V[:, 1]
     ym = mouth_line_y(face, x)
     nose_base = -2.55
     front = face.normals[:, 2] > -0.2

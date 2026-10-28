@@ -1,10 +1,9 @@
 """Composite expressions and speech shapes, front and side view."""
 import sys
-import numpy as np, torch
+import torch
 from PIL import Image, ImageDraw
 from mimetic.face.sim import FaceSim
 from mimetic.face.render import FaceRenderer
-from mimetic.face import anatomy as A
 
 def both(name, v): return {name + '_R': v, name + '_L': v}
 EXPR = {

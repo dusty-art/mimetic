@@ -174,7 +174,6 @@ def main():
                "jerk": [], "pen": [], "frames": 0} for n in names}
     t_run = {n: 0.0 for n in names}
     bil = torch.tensor([P.PID[p] for p in ("P", "B", "M")], device=dev)
-    emo_ids = set(i for i, e in enumerate(EMOTIONS))
     with torch.no_grad():
         for j in range(0, len(clips), 32):
             cl = clips[j:j + 32]

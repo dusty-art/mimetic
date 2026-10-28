@@ -18,7 +18,6 @@ import soundfile as sf  # noqa: E402
 import torch  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
-from mimetic.data import phonemes as P  # noqa: E402
 from mimetic.data import prosody, track  # noqa: E402
 from mimetic.face import anatomy as A  # noqa: E402
 from mimetic.model.articulation import ArticulationLoss  # noqa: E402

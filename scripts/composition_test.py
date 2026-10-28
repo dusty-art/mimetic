@@ -21,7 +21,6 @@ import torch  # noqa: E402
 from mimetic.data import motion as MO  # noqa: E402
 from mimetic.data import phonemes as P  # noqa: E402
 from mimetic.data import prosody  # noqa: E402
-from mimetic.face import anatomy as A  # noqa: E402
 from mimetic.model.articulation import measures  # noqa: E402
 from mimetic.model.controller import EMOTIONS  # noqa: E402
 from mimetic.paths import EXPERIMENTS  # noqa: E402
