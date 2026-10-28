@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mimetic — muscle-driven talking face</title>
+<style>
+  :root { --bg:#f4f3f0; --panel:#ffffff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e4e2dd; --accent:#c2410c; --bar:#ea580c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141416; --panel:#1d1d20; --ink:#ececee; --muted:#9a9aa2; --line:#2c2c31; --accent:#fb923c; --bar:#f97316; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background:var(--bg); color:var(--ink); }
+  .wrap { display:grid; grid-template-columns: minmax(0,1fr) 380px; height:100vh; }
+  #view { position:relative; min-height:320px; }
+  #view canvas { display:block; width:100%; height:100%; }
+  .hud { position:absolute; left:16px; bottom:16px; right:16px; display:flex; gap:8px; flex-wrap:wrap; pointer-events:none; }
+  .chip { background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; color:var(--muted); }
+  .chip b { color:var(--ink); font-weight:600; }
+  aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:16px; }
+  h1 { font-size:18px; margin:0; letter-spacing:-0.01em; }
+  .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  label { font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
+  textarea { width:100%; min-height:96px; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; background:var(--bg); color:var(--ink); }
+  select, input[type=range] { width:100%; }
+  select { border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--bg); color:var(--ink); font:inherit; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .emos { display:flex; flex-wrap:wrap; gap:6px; }
+  button { font:inherit; border:1px solid var(--line); background:var(--bg); color:var(--ink); border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; padding:8px 14px; }
+  button.on { outline:2px solid var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .muscles { display:grid; grid-template-columns: 1fr; gap:3px; font-size:11px; }
+  .m { display:grid; grid-template-columns: 150px 1fr; gap:6px; align-items:center; }
+  .m span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
+  .m i { display:block; height:6px; background:var(--bar); border-radius:3px; width:0; transition:width 40ms linear; }
+  .m .track { background:var(--line); border-radius:3px; height:6px; }
+  .toggles { display:flex; gap:12px; flex-wrap:wrap; font-size:12px; }
+  .status { font-size:12px; color:var(--muted); min-height:18px; }
+  @media (max-width: 820px) { .wrap { grid-template-columns: 1fr; height:auto; } #view { height:60vh; } aside { border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="view"><div class="hud"><span class="chip">phoneme <b id="ph">—</b></span><span class="chip">emotion <b id="em">neutral</b></span><span class="chip" id="mode">text</span></div></div>
+  <aside>
+    <div><h1>Mimetic</h1><div class="sub">Speech and emotion drive 47 facial muscles and the jaw; the skin follows the physics.</div></div>
+    <div>
+      <label for="txt">Text (tags set emotion from that point: <code>[happy:0.8]</code>)</label>
+      <textarea id="txt">[happy:0.7] Hi! Every movement you see is a muscle pulling on skin. [surprised:0.8] Even this! [sad:0.6] And this one, too.</textarea>
+      <div class="emos" id="emos"></div>
+    </div>
+    <div class="row">
+      <div style="flex:1"><label for="voice">Voice</label><select id="voice"></select></div>
+      <div style="flex:1"><label for="gain">Articulation <span id="gainv">1.0</span></label><input id="gain" type="range" min="0.5" max="1.6" step="0.05" value="1"></div>
+    </div>
+    <div class="row"><button class="primary" id="say">Speak</button><button id="replay" disabled>Replay</button><button id="mic">Live mic</button></div>
+    <div class="row" id="liveemo" style="display:none"><label style="margin:0;white-space:nowrap">Live emotion</label><select id="lemo"></select></div>
+    <div class="status" id="status">Loading face…</div>
+    <div class="toggles">
+      <label><input type="checkbox" id="showm"> muscles</label>
+      <label><input type="checkbox" id="wire"> wireframe</label>
+      <label><input type="checkbox" id="xray"> x-ray skin</label>
+    </div>
+    <div class="row"><a href="/api/export/livelink"><button>Live Link CSV</button></a><a href="/api/export/json"><button>Animation JSON</button></a></div>
+    <div><label>Muscle activations</label><div class="muscles" id="bars"></div></div>
+  </aside>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+const EMOS = ["neutral","happy","sad","angry","fearful","disgusted","surprised","contempt","calm"];
+const $ = id => document.getElementById(id);
+const dec = (b64, T) => { const s = atob(b64); const u = new Uint8Array(s.length); for (let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return new T(u.buffer); };
+function f16(b64) { const h = dec(b64, Uint16Array); const out = new Float32Array(h.length);
+  for (let i=0;i<h.length;i++){ const x=h[i], s=(x&0x8000)?-1:1, e=(x>>10)&31, m=x&1023;
+    out[i] = e===0 ? s*Math.pow(2,-14)*(m/1024) : e===31 ? (m?NaN:s*Infinity) : s*Math.pow(2,e-15)*(1+m/1024); } return out; }
+
+let M, rest, S, jawW, nSub, skin, eyes=[], lowerGroup, muscleLines, clip=null, audioCtx=null, src=null, t0=0, raf=null;
+const scene = new THREE.Scene();
+const view = $("view");
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+view.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(22, 1, 1, 400);
+camera.position.set(0, -0.8, 66);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, -0.6, 2); controls.enableDamping = true;
+scene.add(new THREE.HemisphereLight(0xffffff, 0x554444, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(-20, 25, 40); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffeedd, 0.35); fill.position.set(30, 0, 25); scene.add(fill);
+function resize(){ const w=view.clientWidth, h=view.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+window.addEventListener("resize", resize);
+
+function subdivide(x) { // x: Float32Array(n*3) -> Float32Array(nSub*3)
+  const out = new Float32Array(nSub*3);
+  for (let k=0;k<S.v.length;k++){ const r=S.r[k]*3, c=S.c[k]*3, v=S.v[k]; out[r]+=v*x[c]; out[r+1]+=v*x[c+1]; out[r+2]+=v*x[c+2]; }
+  return out;
+}
+function jawRT(a) { // mirrors mimetic.face.sim.jaw_rt
+  const [ao, ac, ap, alr, all] = a;
+  const th = 0.5*ao - 0.035*ac, yaw = 0.06*(all-alr);
+  const P = new THREE.Vector3(0, 0.3, -1.6);
+  const R = new THREE.Matrix4().makeRotationY(yaw).multiply(new THREE.Matrix4().makeRotationX(th));
+  const t = P.clone().sub(P.clone().applyMatrix4(R)).add(new THREE.Vector3(0.55*(all-alr), -0.05*th, 0.55*ap + 2.1*th));
+  return new THREE.Matrix4().makeTranslation(t.x, t.y, t.z).multiply(R);
+}
+function arch(yTop, yBot, zFront, width=2.15, depth=1.7, color=0xeeeae0) {
+  const g = new THREE.BufferGeometry(), n=24, pts=[], idx=[];
+  for (const zo of [0,-0.32]) for (const y of [yTop,yBot]) for (let i=0;i<n;i++){ const s=-1+2*i/(n-1); pts.push(width*s*(zo?0.9:1), y, zFront-depth*s*s+zo); }
+  const I=(l,r,i)=>(l*2+r)*n+i;
+  for (const l of [0,1]) for (let i=0;i<n-1;i++) idx.push(I(l,0,i),I(l,1,i),I(l,0,i+1), I(l,0,i+1),I(l,1,i),I(l,1,i+1));
+  for (const r of [0,1]) for (let i=0;i<n-1;i++) idx.push(I(0,r,i),I(0,r,i+1),I(1,r,i), I(0,r,i+1),I(1,r,i+1),I(1,r,i));
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pts,3)); g.setIndex(idx); g.computeVertexNormals();
+  return new THREE.Mesh(g, new THREE.MeshStandardMaterial({color, roughness:0.35, side:THREE.DoubleSide}));
+}
+
+async function init() {
+  M = await (await fetch("/api/mesh")).json();
+  rest = dec(M.rest, Float32Array); jawW = dec(M.w_jaw, Float32Array);
+  S = { r: dec(M.sub_rows, Int32Array), c: dec(M.sub_cols, Int32Array), v: dec(M.sub_vals, Float32Array) }; nSub = M.n_sub;
+  const faces = dec(M.faces, Int32Array), lip = dec(M.lip, Float32Array);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(subdivide(rest), 3));
+  const col = new Float32Array(nSub*3);
+  for (let i=0;i<nSub;i++){ const l=Math.min(1,lip[i]); col[3*i]=0.86*(1-l)+0.72*l; col[3*i+1]=0.64*(1-l)+0.36*l; col[3*i+2]=0.53*(1-l)+0.36*l; }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  g.setIndex(new THREE.BufferAttribute(new Uint32Array(faces), 1)); g.computeVertexNormals();
+  skin = new THREE.Mesh(g, new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.62, metalness:0, side:THREE.DoubleSide}));
+  scene.add(skin);
+  const cav = new THREE.Mesh(new THREE.SphereGeometry(1,24,12), new THREE.MeshBasicMaterial({color:0x2a0b0d}));
+  cav.scale.set(2.3,1.7,2.0); cav.position.set(0,-4.6,2.9); scene.add(cav);
+  scene.add(arch(-3.55,-4.18,4.85));
+  lowerGroup = new THREE.Group(); lowerGroup.matrixAutoUpdate = false;
+  lowerGroup.add(arch(-4.38,-5.0,4.6,1.95,1.6,0xe6e2d6));
+  const tongue = new THREE.Mesh(new THREE.SphereGeometry(1,24,12), new THREE.MeshStandardMaterial({color:0xb35254, roughness:0.4}));
+  tongue.scale.set(1.5,0.45,1.7); tongue.position.set(0,-4.85,3.1); lowerGroup.add(tongue); scene.add(lowerGroup);
+  for (const e of M.eyes) {
+    const tex = document.createElement("canvas"); tex.width=256; tex.height=128; const c=tex.getContext("2d");
+    c.fillStyle="#f2f0ec"; c.fillRect(0,0,256,128);
+    const grd=c.createRadialGradient(64,64,2,64,64,26); grd.addColorStop(0,"#0b0806"); grd.addColorStop(0.35,"#0b0806"); grd.addColorStop(0.4,"#5a3a22"); grd.addColorStop(0.95,"#2c1c10"); grd.addColorStop(1,"#f2f0ec");
+    c.fillStyle=grd; c.beginPath(); c.arc(64,64,26,0,7); c.fill();
+    const mat = new THREE.MeshStandardMaterial({map:new THREE.CanvasTexture(tex), roughness:0.15});
+    const s = new THREE.Mesh(new THREE.SphereGeometry(e.r, 40, 20), mat);
+    s.position.set(...e.c); scene.add(s); eyes.push(s);
+  }
+  muscleLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({vertexColors:true, depthTest:false, transparent:true}));
+  muscleLines.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(M.muscles.length*6),3));
+  muscleLines.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(M.muscles.length*6),3));
+  muscleLines.visible=false; muscleLines.renderOrder=10; scene.add(muscleLines);
+  for (const v of M.voices) { const o=document.createElement("option"); o.value=o.textContent=v; $("voice").appendChild(o); }
+  for (const e of EMOS) { const b=document.createElement("button"); b.textContent=e; b.onclick=()=>insertTag(e); $("emos").appendChild(b);
+    const o=document.createElement("option"); o.value=o.textContent=e; $("lemo").appendChild(o); }
+  const o=document.createElement("option"); o.value="auto"; o.textContent="auto (from voice)"; $("lemo").prepend(o); $("lemo").value="auto";
+  const bars=$("bars");
+  M.names.forEach((n,i)=>{ const d=document.createElement("div"); d.className="m"; d.title=M.muscles[i].description;
+    d.innerHTML=`<span>${n.replace(/_/g," ")}</span><div class="track"><i id="b${i}"></i></div>`; bars.appendChild(d); });
+  resize(); $("status").textContent = "Ready."; loop();
+}
+function insertTag(e) { const t=$("txt"); const s=t.selectionStart; const tag = e==="neutral" ? "[neutral] " : `[${e}:0.8] `;
+  t.value = t.value.slice(0,s)+tag+t.value.slice(s); t.focus(); }
+
+function setFrame(verts, acts, head, gaze) {
+  const pos = skin.geometry.attributes.position;
+  pos.array.set(subdivide(verts)); pos.needsUpdate = true; skin.geometry.computeVertexNormals();
+  const nA = M.names.length;
+  if (acts) {
+    lowerGroup.matrix.copy(jawRT([acts[nA-5],acts[nA-4],acts[nA-3],acts[nA-2],acts[nA-1]]));
+    for (let i=0;i<nA;i++){ const el=$("b"+i); if (el) el.style.width = (100*acts[i]).toFixed(1)+"%"; }
+    if (muscleLines.visible) updateMuscles(verts, acts);
+  }
+  if (head) { const grp=[skin, lowerGroup, ...eyes]; }
+  if (gaze) for (const e of eyes) { e.rotation.y = gaze[0]; e.rotation.x = -gaze[1]; }
+}
+function updateMuscles(v, acts) {
+  const P = muscleLines.geometry.attributes.position.array, C = muscleLines.geometry.attributes.color.array;
+  const jm = jawRT(acts.slice(-5));
+  M.muscles.forEach((m,i)=>{
+    if (!m.origin || m.ins_idx.length===0) { for (let k=0;k<6;k++) P[6*i+k]=0; return; }
+    let o = new THREE.Vector3(...m.origin); if (m.jaw) o.applyMatrix4(jm);
+    let cx=0,cy=0,cz=0,ws=0; m.ins_idx.forEach((j,k)=>{ const w=m.ins_w[k]; cx+=w*v[3*j]; cy+=w*v[3*j+1]; cz+=w*v[3*j+2]; ws+=w; });
+    const ins = new THREE.Vector3(cx/ws, cy/ws, cz/ws);
+    if (m.kind==="sphincter"||m.kind==="marginal") o = ins.clone().lerp(o, 0.35);
+    o.z += 0.8; ins.z += 0.8;
+    P.set([o.x,o.y,o.z, ins.x,ins.y,ins.z], 6*i);
+    const a = acts[i]; C.set([0.2+0.8*a, 0.3*(1-a), 0.95*(1-a), 0.2+0.8*a, 0.3*(1-a), 0.95*(1-a)], 6*i);
+  });
+  muscleLines.geometry.attributes.position.needsUpdate = true; muscleLines.geometry.attributes.color.needsUpdate = true;
+}
+
+function loop() {
+  raf = requestAnimationFrame(loop); controls.update();
+  if (clip && audioCtx) {
+    const t = audioCtx.currentTime - t0; const f = Math.min(clip.n-1, Math.max(0, Math.floor(t*clip.fps)));
+    const nA = M.names.length, N3 = M.n*3;
+    setFrame(clip.verts.subarray(f*N3,(f+1)*N3), clip.acts.subarray(f*nA,(f+1)*nA), null, clip.gaze.subarray(2*f,2*f+2));
+    const ph = clip.phonemes.find(p=>p[0]<=t && t<p[1]); $("ph").textContent = ph ? ph[2] : "—";
+    const em = clip.emotions.find(p=>p[0]<=t && t<p[1]); if (em) $("em").textContent = em[2] + (em[3]? " "+em[3].toFixed(1):"");
+    if (t > clip.n/clip.fps) clip.playing=false;
+  }
+  renderer.render(scene, camera);
+}
+
+async function speak() {
+  $("say").disabled = true; $("status").textContent = "Synthesising speech and solving muscles…";
+  const t = performance.now();
+  const r = await fetch("/api/say", {method:"POST", headers:{"content-type":"application/json"},
+    body: JSON.stringify({text:$("txt").value, voice:$("voice").value, gain:parseFloat($("gain").value)})});
+  const j = await r.json();
+  clip = { fps:j.fps, n:j.n, acts:dec(j.acts, Float32Array), verts:f16(j.verts), gaze:dec(j.gaze, Float32Array), phonemes:j.phonemes, emotions:j.emotions, audio:j.audio };
+  $("status").textContent = `${(j.n/j.fps).toFixed(1)} s of animation in ${((performance.now()-t)/1000).toFixed(1)} s.`;
+  $("say").disabled = false; $("replay").disabled = false; play();
+}
+async function play() {
+  audioCtx = audioCtx || new AudioContext();
+  const buf = await audioCtx.decodeAudioData(dec(clip.audio, Uint8Array).buffer.slice(0));
+  if (src) try { src.stop(); } catch(e) {}
+  src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination);
+  t0 = audioCtx.currentTime + 0.05; src.start(t0); $("mode").textContent = "text";
+}
+
+let ws=null, micCtx=null, micNode=null, micStream=null;
+async function toggleMic() {
+  if (ws) { ws.close(); ws=null; micNode && micNode.disconnect(); micStream && micStream.getTracks().forEach(t=>t.stop()); $("mic").classList.remove("on"); $("liveemo").style.display="none"; $("mode").textContent="text"; return; }
+  clip = null;
+  micStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true}});
+  micCtx = new AudioContext({sampleRate:16000});
+  const srcN = micCtx.createMediaStreamSource(micStream);
+  micNode = micCtx.createScriptProcessor(512, 1, 1);
+  ws = new WebSocket(`ws://${location.host}/ws/live`);
+  ws.onopen = () => { ws.send(JSON.stringify({emotion:$("lemo").value, intensity:0.8})); };
+  ws.onmessage = (ev) => { const j = JSON.parse(ev.data); setFrame(f16(j.verts), j.acts, null, null);
+    if (j.emotion) { let bi=0; j.emotion.forEach((p,i)=>{ if (p>j.emotion[bi]) bi=i; }); $("em").textContent = EMOS[bi]; } };
+  micNode.onaudioprocess = (e) => { if (ws && ws.readyState===1) ws.send(e.inputBuffer.getChannelData(0).slice(0).buffer); };
+  srcN.connect(micNode); micNode.connect(micCtx.destination);
+  $("mic").classList.add("on"); $("liveemo").style.display="flex"; $("mode").textContent="live mic";
+}
+$("lemo").onchange = () => ws && ws.send(JSON.stringify({emotion:$("lemo").value, intensity:0.8}));
+$("say").onclick = speak; $("replay").onclick = play; $("mic").onclick = toggleMic;
+$("gain").oninput = () => $("gainv").textContent = parseFloat($("gain").value).toFixed(2);
+$("showm").onchange = e => muscleLines.visible = e.target.checked;
+$("wire").onchange = e => skin.material.wireframe = e.target.checked;
+$("xray").onchange = e => { skin.material.transparent = e.target.checked; skin.material.opacity = e.target.checked ? 0.45 : 1; skin.material.needsUpdate = true; };
+init();
+</script>
+</body>
+</html>

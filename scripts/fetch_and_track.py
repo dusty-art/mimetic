@@ -74,11 +74,13 @@ def process_unit(unit: sources.Unit, archive: Path, pool):
         members = [m for m in z.namelist() if Path(m).suffix.lower() in sources.VIDEO_EXT and "__MACOSX" not in m]
         z.extractall(tmp, members)
     root = RAW / unit.dataset
+    videos = [v for v in sorted(tmp.rglob("*")) if v.suffix.lower() in sources.VIDEO_EXT]
+    align_dir = sources.grid_alignment_dir({v.stem for v in videos}, root) if unit.dataset == "grid" else None
+    if unit.dataset == "grid":
+        log(f"grid/{unit.name}: transcripts from alignments/{align_dir.name if align_dir else 'NONE'}")
     jobs = []
-    for v in sorted(tmp.rglob("*")):
-        if v.suffix.lower() not in sources.VIDEO_EXT:
-            continue
-        meta = sources.clip_meta(unit.dataset, v, root)
+    for v in videos:
+        meta = sources.clip_meta(unit.dataset, v, root, align_dir)
         if meta is None:
             continue
         out = PROCESSED / unit.dataset / meta["speaker"] / f"{meta['clip']}.npz"
@@ -95,6 +97,7 @@ def process_unit(unit: sources.Unit, archive: Path, pool):
     shutil.rmtree(tmp)
     archive.unlink(missing_ok=True)
     log(f"{unit.dataset}/{unit.name}: {ok} clips ok, {bad} skipped in {time.time() - t0:.0f}s, free {free_gb():.1f} GB")
+    return ok
 
 
 def parse_order(spec):
@@ -102,8 +105,12 @@ def parse_order(spec):
             "cremad": list(sources.cremad_units())}
     seen, units = set(), []
     for part in spec.split(","):
-        name, _, n = part.partition(":")
-        lst = gens[name][: int(n)] if n else gens[name]
+        if "@" in part:                      # a single unit, e.g. grid@s32
+            name, _, unit = part.partition("@")
+            lst = [u for u in gens[name] if u.name == unit]
+        else:
+            name, _, n = part.partition(":")
+            lst = gens[name][: int(n)] if n else gens[name]
         for u in lst:
             if (u.dataset, u.name) not in seen:
                 seen.add((u.dataset, u.name))
@@ -146,8 +153,9 @@ def main():
             log(f"stopping: free disk {free_gb():.1f} GB below floor")
             break
         try:
-            process_unit(u, arch, pool)
-            (DONE / f"{u.dataset}_{u.name}").touch()
+            n_ok = process_unit(u, arch, pool)
+            if n_ok:
+                (DONE / f"{u.dataset}_{u.name}").touch()
         except Exception:
             log(f"{u.dataset}/{u.name}: failed\n{traceback.format_exc()}")
     pool.shutdown()

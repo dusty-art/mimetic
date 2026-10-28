@@ -50,14 +50,17 @@ def jaw_rt(jaw_act: torch.Tensor, tmj=(0.0, 0.3, -1.6)):
     """Mandible pose from jaw actuators (B,5) = open, close, protrude, lateral_R, lateral_L.
 
     Opening is a rotation about the TMJ axis coupled with forward condylar
-    translation, as in real jaw opening. Returns R (B,3,3), t (B,3).
+    translation, as in real jaw opening. The coupling (2.1 cm per radian) was
+    calibrated on muscle fits of real video: with the textbook-small value the
+    fitter co-activated "protrusion" with every opening (r = 0.78).
+    Returns R (B,3,3), t (B,3).
     """
     a_open, a_close, a_prot, a_lr, a_ll = jaw_act.unbind(-1)
     theta = 0.50 * a_open - 0.035 * a_close
     yaw = 0.06 * (a_ll - a_lr)
     R = _rot_y(yaw) @ _rot_x(theta)
     P = torch.tensor(tmj, dtype=jaw_act.dtype, device=jaw_act.device)
-    shift = torch.stack([0.55 * (a_ll - a_lr), -0.05 * theta, 0.55 * a_prot + 0.35 * theta], -1)
+    shift = torch.stack([0.55 * (a_ll - a_lr), -0.05 * theta, 0.55 * a_prot + 2.1 * theta], -1)
     t = P - (R @ P) + shift
     return R, t
 
